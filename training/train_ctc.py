@@ -16,6 +16,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 from torch.utils.data import DataLoader, random_split
 
@@ -90,13 +91,16 @@ def train(args):
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    for epoch in range(1, args.epochs + 1):
+    epoch_bar = tqdm(range(1, args.epochs + 1), desc="Training", unit="epoch")
+    for epoch in epoch_bar:
         # Train
         model.train()
         train_loss = 0.0
         train_n = 0
 
-        for features, targets, input_lengths, target_lengths in train_loader:
+        train_bar = tqdm(train_loader, desc=f"Epoch {epoch} [train]",
+                         leave=False, unit="batch")
+        for features, targets, input_lengths, target_lengths in train_bar:
             features = features.to(device)
             targets = targets.to(device)
             input_lengths = input_lengths.to(device)
@@ -113,6 +117,7 @@ def train(args):
             batch_size = features.size(0)
             train_loss += loss.item() * batch_size
             train_n += batch_size
+            train_bar.set_postfix(loss=f"{loss.item():.4f}")
 
         train_loss /= train_n
 
@@ -125,7 +130,9 @@ def train(args):
         examples = []
 
         with torch.no_grad():
-            for features, targets, input_lengths, target_lengths in val_loader:
+            val_bar = tqdm(val_loader, desc=f"Epoch {epoch} [val]",
+                           leave=False, unit="batch")
+            for features, targets, input_lengths, target_lengths in val_bar:
                 features = features.to(device)
                 targets = targets.to(device)
                 input_lengths = input_lengths.to(device)
@@ -163,16 +170,24 @@ def train(args):
         val_cer = total_edits / total_chars if total_chars > 0 else 1.0
         scheduler.step(val_loss)
 
+        # Update epoch progress bar with metrics
+        epoch_bar.set_postfix(
+            train_loss=f"{train_loss:.4f}",
+            val_loss=f"{val_loss:.4f}",
+            cer=f"{val_cer:.3f}",
+            best_cer=f"{best_val_cer:.3f}",
+        )
+
         if epoch % 5 == 0 or epoch == 1:
             lr = optimizer.param_groups[0]["lr"]
-            print(f"Epoch {epoch:3d}/{args.epochs}  "
-                  f"train_loss={train_loss:.4f}  "
-                  f"val_loss={val_loss:.4f}  val_cer={val_cer:.3f}  "
-                  f"lr={lr:.6f}")
+            tqdm.write(f"Epoch {epoch:3d}/{args.epochs}  "
+                       f"train_loss={train_loss:.4f}  "
+                       f"val_loss={val_loss:.4f}  val_cer={val_cer:.3f}  "
+                       f"lr={lr:.6f}")
             # Show example predictions
             for true_text, pred_text in examples[:3]:
-                marker = "✓" if true_text == pred_text else "✗"
-                print(f"    {marker} \"{true_text}\" -> \"{pred_text}\"")
+                marker = "+" if true_text == pred_text else "x"
+                tqdm.write(f"    {marker} \"{true_text}\" -> \"{pred_text}\"")
 
         # Save best model
         if val_cer < best_val_cer:
