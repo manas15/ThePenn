@@ -124,8 +124,8 @@
     <div class="subtitle">Live handwriting recognition</div>
 
     <div class="mock-bar">
-        <span>Demo:</span>
         <button id="btn-mock" class="btn btn-mock">Start Mock Stream</button>
+        <button id="btn-pen" class="btn btn-mock">Start Live Pen</button>
         <span id="mock-status"></span>
     </div>
 
@@ -208,6 +208,7 @@
         }
 
         function startMockStream() {
+            if (penRunning) stopPen();
             prepareMockWords();
             mockRunning = true;
             $btnMock.textContent = "Stop Mock";
@@ -318,8 +319,88 @@
             $araPanel.style.display = "none";
         }
 
+        // ── Live Pen via WebSocket ─────────────────────────
+        const $btnPen = document.getElementById("btn-pen");
+        let penWs = null;
+        let penRunning = false;
+
+        function togglePen() {
+            if (penRunning) {
+                stopPen();
+            } else {
+                startPen();
+            }
+        }
+
+        function startPen() {
+            // Stop mock if running
+            if (mockRunning) stopMockStream();
+
+            penRunning = true;
+            $btnPen.textContent = "Stop Live Pen";
+            $btnPen.classList.add("active");
+            $btnMock.disabled = true;
+            $streamDot.classList.remove("off");
+            $streamStatus.textContent = "Connecting to pen...";
+            $mockStatus.textContent = "";
+
+            const proto = location.protocol === "https:" ? "wss:" : "ws:";
+            penWs = new WebSocket(`${proto}//${location.host}/ws/pen`);
+
+            penWs.onopen = function() {
+                penWs.send(JSON.stringify({ type: "start" }));
+            };
+
+            penWs.onmessage = function(evt) {
+                const data = JSON.parse(evt.data);
+                switch (data.type) {
+                    case "pen_started":
+                        $streamStatus.textContent = "Live pen connected — start writing!";
+                        break;
+                    case "writing":
+                        $streamStatus.textContent = "Writing detected...";
+                        break;
+                    case "word":
+                        addWord(data.word);
+                        $streamStatus.textContent = `Recognized: "${data.word}" ${data.confidence ? '(' + data.confidence + ')' : ''}`;
+                        break;
+                    case "low_confidence":
+                        $mockStatus.textContent = `Low confidence: "${data.word}" — skipped`;
+                        break;
+                    case "pen_stopped":
+                        stopPen();
+                        $mockStatus.textContent = "Pen disconnected";
+                        break;
+                }
+            };
+
+            penWs.onclose = function() {
+                if (penRunning) stopPen();
+            };
+            penWs.onerror = function() {
+                $streamStatus.textContent = "Pen connection error";
+                stopPen();
+            };
+        }
+
+        function stopPen() {
+            penRunning = false;
+            $btnPen.textContent = "Start Live Pen";
+            $btnPen.classList.remove("active");
+            $btnMock.disabled = false;
+            $streamDot.classList.add("off");
+            $streamStatus.textContent = "Pen stopped";
+
+            if (penWs && penWs.readyState === WebSocket.OPEN) {
+                penWs.send(JSON.stringify({ type: "stop" }));
+                penWs.close();
+            }
+            penWs = null;
+        }
+
         // ── Button event listeners ─────────────────────────
         $btnMock.addEventListener("click", toggleMockStream);
+        $btnPen.addEventListener("click", togglePen);
         $btnSave.addEventListener("click", function() { sendToAra("save"); });
         $btnFlash.addEventListener("click", function() { sendToAra("flashcards"); });
         $btnSummary.addEventListener("click", function() { sendToAra("summary"); });
