@@ -94,10 +94,57 @@ async def api_ara(request):
         result = json.loads(stdout.decode())
         output = result.get("result", {}).get("output_text", "No response.")
         print(f"[ara] {action}: {output[:120]}...")
+
+        # If telegram action, also send via Telegram Bot API
+        if action == "telegram":
+            tg_result = await _send_telegram(f"📝 *{subject.title()} Notes Summary*\n\n{output}")
+            if tg_result:
+                output += "\n\n✅ Sent to your Telegram!"
+            else:
+                output += "\n\n⚠️ Telegram send failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env"
+
+        # If email action, also send via Telegram as fallback for demo
+        if action == "email":
+            tg_result = await _send_telegram(f"📧 *{subject.title()} Notes (via email)*\n\n{output}")
+            if tg_result:
+                output += "\n\n✅ Sent to your Telegram!"
+
         return web.json_response({"text": output, "action": action})
     except Exception as e:
         print(f"[ara] exception: {e}")
         return web.json_response({"text": f"Failed: {e}", "error": True})
+
+
+async def _send_telegram(message: str) -> bool:
+    """Send a message via Telegram Bot API."""
+    import urllib.request
+    import urllib.error
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        print("[telegram] missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+        return False
+
+    payload = json.dumps({
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown",
+    }).encode()
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+            print(f"[telegram] sent: {result.get('ok')}")
+            return result.get("ok", False)
+    except Exception as e:
+        print(f"[telegram] error: {e}")
+        return False
 
 
 async def api_push_word(request):
