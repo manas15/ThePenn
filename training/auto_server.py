@@ -448,6 +448,67 @@ def build_app(reader):
                                 "words": len(word_events),
                             }))
 
+                    elif cmd == "send_to_ara":
+                        words = data.get("words", [])
+                        subject = data.get("subject", "general").strip()
+                        action = data.get("action", "save").strip()
+                        text = " ".join(w.strip() for w in words if w.strip())
+
+                        if not text:
+                            await ws.send_str(json.dumps({
+                                "type": "ara_response",
+                                "text": "No text to send.",
+                            }))
+                        else:
+                            await ws.send_str(json.dumps({
+                                "type": "ara_status",
+                                "text": "Sending to ThePenn study agent...",
+                            }))
+
+                            ara_app_path = str(Path(__file__).resolve().parent.parent / "ara_app.py")
+                            if action == "save":
+                                msg_text = f"New notes for {subject}: {text}"
+                            elif action == "flashcards":
+                                msg_text = f"Generate flashcards for my {subject} notes"
+                            elif action == "quiz":
+                                msg_text = f"Quiz me on my {subject} notes"
+                            elif action == "summary":
+                                msg_text = f"Summarize my {subject} notes"
+                            else:
+                                msg_text = text
+
+                            try:
+                                ara_env = os.environ.copy()
+                                ara_env.setdefault("ARA_API_KEY", "")
+                                ara_env.setdefault("ARA_RUNTIME_KEY", "")
+                                proc = await asyncio.create_subprocess_exec(
+                                    sys.executable, "-m", "ara_sdk",
+                                    "run", ara_app_path,
+                                    "--agent", "study",
+                                    "--message", msg_text,
+                                    stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.PIPE,
+                                    cwd=str(Path(__file__).resolve().parent.parent),
+                                    env=ara_env,
+                                )
+                                stdout, stderr = await proc.communicate()
+                                response = stdout.decode().strip()
+                                if proc.returncode != 0:
+                                    err = stderr.decode().strip()[-500:]
+                                    print(f"[ara] error: {err}")
+                                    response = f"Ara agent error: {err}"
+                                else:
+                                    print(f"[ara] response: {response[:200]}")
+                            except Exception as e:
+                                response = f"Failed to reach Ara agent: {e}"
+                                print(f"[ara] exception: {e}")
+
+                            await ws.send_str(json.dumps({
+                                "type": "ara_response",
+                                "text": response,
+                                "action": action,
+                            }))
+
                 elif msg.type == web.WSMsgType.ERROR:
                     break
         finally:
@@ -481,11 +542,65 @@ def build_app(reader):
             import traceback; traceback.print_exc()
             return web.json_response({"sample_id": sample_id, "text": "", "error": str(e)})
 
+    async def notes_page(request):
+        return web.FileResponse(STATIC_DIR / "notes.html")
+
+    async def api_ara(request):
+        """HTTP endpoint for Ara agent — used by the notes UI."""
+        data = await request.json()
+        action = data.get("action", "save")
+        subject = data.get("subject", "general").strip()
+        text = data.get("text", "").strip()
+
+        if not text:
+            return web.json_response({"text": "No text provided.", "error": True})
+
+        ara_app_path = str(Path(__file__).resolve().parent.parent / "ara_app.py")
+
+        if action == "save":
+            msg_text = f"New notes for {subject}: {text}"
+        elif action == "flashcards":
+            msg_text = f"Generate flashcards for my {subject} notes"
+        elif action == "quiz":
+            msg_text = f"Quiz me on my {subject} notes"
+        elif action == "summary":
+            msg_text = f"Summarize my {subject} notes"
+        else:
+            msg_text = text
+
+        try:
+            ara_env = os.environ.copy()
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "ara_sdk",
+                "run", ara_app_path,
+                "--agent", "study",
+                "--message", msg_text,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(Path(__file__).resolve().parent.parent),
+                env=ara_env,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                err = stderr.decode().strip()[-500:]
+                print(f"[ara] error: {err}")
+                return web.json_response({"text": f"Ara error: {err}", "error": True})
+
+            result = json.loads(stdout.decode())
+            output = result.get("result", {}).get("output_text", "No response from agent.")
+            print(f"[ara] {action}: {output[:100]}...")
+            return web.json_response({"text": output, "action": action})
+        except Exception as e:
+            print(f"[ara] exception: {e}")
+            return web.json_response({"text": f"Failed to reach Ara: {e}", "error": True})
+
     app.router.add_get("/", index)
+    app.router.add_get("/notes", notes_page)
     app.router.add_get("/static/{filename}", static_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_post("/api/samples/{id}/audio", api_upload_audio)
     app.router.add_get("/api/samples/{id}/transcribe", api_transcribe)
+    app.router.add_post("/api/ara", api_ara)
     return app
 
 

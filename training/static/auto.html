@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Writer — Auto Collector</title>
+    <title>ThePenn — Smart Note Collector</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 16px; }
@@ -105,6 +105,22 @@
     <section id="captured-section" style="display:none">
         <h3>Captured Words (<span id="captured-count">0</span>)</h3>
         <div id="captured-list"></div>
+    </section>
+
+    <!-- Ara Study Assistant -->
+    <section id="ara-section" style="display:none; margin-top: 16px;">
+        <h3 style="font-size:14px; color:#58a6ff; margin-bottom:8px;">ThePenn Study Assistant</h3>
+        <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap;">
+            <label style="font-size:13px; color:#8b949e;">Subject:</label>
+            <input id="ara-subject" type="text" placeholder="e.g. biology" value=""
+                   style="background:#0d1117; border:1px solid #30363d; color:#c9d1d9; padding:6px 10px; border-radius:6px; font-size:14px; width:150px;">
+            <button id="btn-ara-save" class="btn-start" style="font-size:13px; padding:6px 14px;">Send to Ara</button>
+            <button id="btn-ara-flashcards" style="background:#1f6feb; color:#fff; font-size:13px; padding:6px 14px; border:none; border-radius:6px; cursor:pointer;">Flashcards</button>
+            <button id="btn-ara-summary" style="background:#8957e5; color:#fff; font-size:13px; padding:6px 14px; border:none; border-radius:6px; cursor:pointer;">Summary</button>
+            <button id="btn-ara-quiz" style="background:#d29922; color:#fff; font-size:13px; padding:6px 14px; border:none; border-radius:6px; cursor:pointer;">Quiz Me</button>
+        </div>
+        <div id="ara-status" style="font-size:12px; color:#8b949e; margin-bottom:6px;"></div>
+        <div id="ara-response" style="display:none; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px; font-size:14px; line-height:1.6; white-space:pre-wrap; max-height:400px; overflow-y:auto;"></div>
     </section>
 
     <div id="log"></div>
@@ -501,6 +517,19 @@
                         $status.textContent = `Saved: ${data.csv}`;
                         $btnSave.style.display = "none";
                         $btnStart.style.display = "";
+                        // Show Ara section after saving
+                        $araSection.style.display = "";
+                        break;
+
+                    case "ara_status":
+                        $araStatus.textContent = data.text;
+                        break;
+
+                    case "ara_response":
+                        $araStatus.textContent = "";
+                        $araResponse.style.display = "";
+                        $araResponse.textContent = data.text;
+                        log(`Ara (${data.action || "response"}): ${data.text.slice(0, 80)}...`);
                         break;
                 }
             };
@@ -579,8 +608,41 @@
             $btnSave.style.display = completedWords.length > 0 ? "" : "none";
             $btnSave.disabled = false;
             $status.textContent = `Session stopped. Review labels and click Save.`;
+            if (completedWords.length > 0) $araSection.style.display = "";
             renderCaptured();
         });
+
+        // ─── Ara Integration ───────────────────────────────
+        const $araSection = document.getElementById("ara-section");
+        const $araSubject = document.getElementById("ara-subject");
+        const $araStatus = document.getElementById("ara-status");
+        const $araResponse = document.getElementById("ara-response");
+
+        function getNotesText() {
+            return completedWords.filter(cw => cw.word).map(cw => cw.word).join(" ");
+        }
+
+        function sendToAra(action) {
+            const subject = $araSubject.value.trim() || "general";
+            const words = completedWords.filter(cw => cw.word).map(cw => cw.word);
+            if (words.length === 0 && action === "save") {
+                $araStatus.textContent = "No words to send.";
+                return;
+            }
+            $araStatus.textContent = "Sending to ThePenn study agent...";
+            $araResponse.style.display = "none";
+            ws.send(JSON.stringify({
+                type: "send_to_ara",
+                words: words,
+                subject: subject,
+                action: action,
+            }));
+        }
+
+        document.getElementById("btn-ara-save").addEventListener("click", () => sendToAra("save"));
+        document.getElementById("btn-ara-flashcards").addEventListener("click", () => sendToAra("flashcards"));
+        document.getElementById("btn-ara-summary").addEventListener("click", () => sendToAra("summary"));
+        document.getElementById("btn-ara-quiz").addEventListener("click", () => sendToAra("quiz"));
 
         $btnSave.addEventListener("click", async () => {
             // Check for still-transcribing or unlabeled words
