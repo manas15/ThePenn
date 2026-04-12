@@ -144,6 +144,8 @@
         <button id="btn-flashcards" class="btn btn-flashcards" disabled>Flashcards</button>
         <button id="btn-summary" class="btn btn-summary" disabled>Summary</button>
         <button id="btn-quiz" class="btn btn-quiz" disabled>Quiz Me</button>
+        <button id="btn-email" class="btn" style="background:#ea4335;color:#fff" disabled>Send via Email</button>
+        <button id="btn-telegram" class="btn" style="background:#0088cc;color:#fff" disabled>Send via Telegram</button>
         <button id="btn-clear" class="btn btn-clear">Clear</button>
     </div>
 
@@ -169,6 +171,8 @@
         const $btnFlash = document.getElementById("btn-flashcards");
         const $btnSummary = document.getElementById("btn-summary");
         const $btnQuiz = document.getElementById("btn-quiz");
+        const $btnEmail = document.getElementById("btn-email");
+        const $btnTelegram = document.getElementById("btn-telegram");
         const $btnMock = document.getElementById("btn-mock");
         const $mockStatus = document.getElementById("mock-status");
 
@@ -268,6 +272,8 @@
             $btnFlash.disabled = !hasWords;
             $btnSummary.disabled = !hasWords;
             $btnQuiz.disabled = !hasWords;
+            $btnEmail.disabled = !hasWords;
+            $btnTelegram.disabled = !hasWords;
         }
 
         // ── Ara integration ────────────────────────────────
@@ -358,6 +364,8 @@
         $btnFlash.addEventListener("click", function() { sendToAra("flashcards"); });
         $btnSummary.addEventListener("click", function() { sendToAra("summary"); });
         $btnQuiz.addEventListener("click", function() { sendToAra("quiz"); });
+        $btnEmail.addEventListener("click", function() { sendToAra("email"); });
+        $btnTelegram.addEventListener("click", function() { sendToAra("telegram"); });
         document.getElementById("btn-clear").addEventListener("click", clearNotes);
         document.getElementById("btn-close-panel").addEventListener("click", closePanel);
     </script>

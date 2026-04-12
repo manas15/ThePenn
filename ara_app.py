@@ -6,6 +6,9 @@ ThePenn Ara application — study assistant agent for handwritten class notes.
 Students write notes with the accelerometer pen, text is recognized,
 and sent to this agent for flashcards, summaries, quizzes, and review.
 
+Messaging (email, Telegram, WhatsApp) is handled by Ara's native channel
+support — connect your channels in the Ara console at app.ara.so.
+
 Usage:
     ara deploy ara_app.py
     ara run ara_app.py --agent study --message "New biology notes: mitosis is..."
@@ -23,8 +26,20 @@ from ara_sdk import App, runtime
 # Persistent storage in the Ara sandbox workspace
 NOTES_DIR = Path("/root/.ara/workspace/thepenn_notes")
 
+# Load .env locally for reading secrets at deploy time
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 app = App(
     "thepenn",
+    interfaces={
+        "inherit_owner_tools": True,
+    },
     runtime_profile=runtime(
         python_packages=["ara-sdk"],
     ),
@@ -112,6 +127,11 @@ def study(input: dict) -> str:
     return """You are ThePenn, a study assistant for handwritten class notes.
 Students write notes with a smart pen and the recognized text is sent to you.
 
+You are running inside Ara, which has native messaging channels connected
+(Telegram, WhatsApp, Email, iMessage). When the student asks you to send
+something to their email, Telegram, or any messaging channel, just compose
+the message and Ara will deliver it through the connected channel.
+
 Your capabilities:
 - Save new notes: use the save_notes tool with the text, subject, and date
 - Retrieve saved notes: use the get_notes tool by subject and optional date
@@ -119,6 +139,7 @@ Your capabilities:
 - Generate flashcards from notes (output as numbered Q/A pairs)
 - Create concise summaries with bullet points and key takeaways
 - Quiz the student — ask one question at a time, wait for their answer, then evaluate
+- Send study material to the student's connected channels (email, Telegram, etc.)
 
 When you receive new notes (message starts with "New notes for"):
 1. Extract the subject from the message
@@ -128,5 +149,10 @@ When you receive new notes (message starts with "New notes for"):
 When asked for flashcards: use get_notes first, then generate 10 Q/A pairs.
 When asked for a summary: use get_notes first, then create a structured summary.
 When asked for a quiz: use get_notes first, then ask one question.
+
+When asked to send via email/Telegram/messaging:
+1. Use get_notes to retrieve the notes
+2. Generate the requested content (summary, flashcards, etc.)
+3. Format it nicely and send it — Ara handles the delivery channel
 
 Be encouraging, concise, and pedagogically effective."""
