@@ -14,67 +14,117 @@
         .dot.disconnected { background: #f85149; }
         .spacer { flex: 1; }
 
-        /* Output sentence */
-        #output-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 12px 0; }
-        #output-label { font-size: 12px; color: #8b949e; margin-bottom: 6px; }
-        #output-sentence { font-size: 28px; font-weight: 600; min-height: 40px; word-wrap: break-word; }
-        #output-sentence .word { display: inline; }
-        #output-sentence .word.pending { color: #8b949e; font-style: italic; }
-        #output-sentence .word.accepted { color: #3fb950; }
-        #output-sentence .word.rejected { color: #f85149; text-decoration: line-through; }
-        #word-count { font-size: 13px; color: #8b949e; margin-top: 8px; }
-
-        /* Chart */
         #chart-wrap { height: 120px; margin: 8px 0; }
         #chart-wrap canvas { width: 100%; height: 100%; }
 
-        /* P(writing) bar */
         #prob-bar-wrap { height: 28px; background: #161b22; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; position: relative; }
         #prob-bar { height: 100%; background: #238636; transition: width 0.05s; width: 0%; }
         #prob-label { position: absolute; top: 4px; left: 8px; font-size: 12px; color: #8b949e; }
 
-        /* Vocabulary */
-        #vocab { font-size: 12px; color: #484f58; margin-bottom: 12px; }
+        /* Controls */
+        #controls { display: flex; gap: 8px; margin: 12px 0; align-items: center; flex-wrap: wrap; }
+        button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        button:disabled { opacity: 0.4; cursor: default; }
+        .btn-start { background: #238636; color: #fff; }
+        .btn-stop { background: #da3633; color: #fff; }
+        .btn-save { background: #1f6feb; color: #fff; }
+        .btn-retrain { background: #a371f7; color: #fff; }
 
-        /* Two-column layout: queue + log */
-        #panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-        @media (max-width: 800px) { #panels { grid-template-columns: 1fr; } }
+        /* Toggle switches */
+        .toggle-row { display: flex; gap: 16px; align-items: center; margin: 8px 0; font-size: 13px; }
+        .toggle-group { display: flex; align-items: center; gap: 6px; }
+        .toggle-label { color: #8b949e; }
+        .toggle-switch { position: relative; width: 36px; height: 20px; cursor: pointer; display: inline-block; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; inset: 0; background: #30363d; border-radius: 10px; transition: 0.2s; }
+        .toggle-slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 2px; bottom: 2px; background: #8b949e; border-radius: 50%; transition: 0.2s; }
+        .toggle-switch input:checked + .toggle-slider { background: #238636; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
 
-        /* Word queue */
-        #queue-section { }
-        #queue-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
-        .queue-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-        .queue-card.writing { border-color: #d29922; }
-        .queue-card.classifying { border-color: #1f6feb; }
-        .queue-card.accepted { border-color: #3fb950; }
-        .queue-card.rejected { border-color: #f85149; }
-        .queue-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-        .queue-num { font-size: 12px; color: #8b949e; min-width: 28px; }
-        .queue-status { font-size: 13px; font-weight: 600; }
-        .queue-status.writing { color: #d29922; }
-        .queue-status.classifying { color: #1f6feb; }
-        .queue-status.accepted { color: #3fb950; }
-        .queue-status.rejected { color: #f85149; }
-        .queue-info { font-size: 12px; color: #8b949e; }
-        .queue-top3 { font-size: 12px; color: #8b949e; margin-top: 4px; }
-        .queue-top3 .rank { display: inline-block; margin-right: 12px; }
-        .queue-top3 .rank .w { color: #c9d1d9; }
-        .queue-top3 .rank .p { color: #8b949e; }
-        .queue-canvas { width: 100%; height: 60px; margin-top: 6px; }
+        /* Prompt area */
+        #prompt { font-size: 48px; font-weight: 700; text-align: center; padding: 24px 0; min-height: 100px;
+                  display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        #prompt .sub { font-size: 14px; color: #8b949e; font-weight: 400; margin-top: 4px; }
+        #prompt.writing { color: #3fb950; }
+        #prompt.flash { animation: flash 0.4s ease; }
+        @keyframes flash { 0% { color: #58a6ff; transform: scale(1.1); } 100% { color: #c9d1d9; transform: scale(1); } }
 
-        /* Pipeline log */
-        #log-section { }
-        #log-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
-        #log { font-size: 12px; font-family: 'SF Mono', 'Menlo', monospace; color: #8b949e; max-height: 500px;
-               overflow-y: auto; background: #161b22; border-radius: 6px; padding: 8px; border: 1px solid #30363d; }
-        #log div { padding: 3px 0; border-bottom: 1px solid #21262d; white-space: pre-wrap; }
-        #log .log-event { color: #c9d1d9; }
-        #log .log-word-start { color: #d29922; }
-        #log .log-word-end { color: #1f6feb; }
-        #log .log-classify { color: #1f6feb; font-style: italic; }
-        #log .log-result { color: #3fb950; font-weight: 600; }
-        #log .log-reject { color: #f85149; }
-        #log .log-status { color: #484f58; }
+        #status-msg { font-size: 13px; color: #8b949e; margin: 4px 0; }
+        #vocab { font-size: 12px; color: #484f58; margin-bottom: 8px; }
+
+        /* Captured words */
+        #captured-section { margin-top: 16px; }
+        #captured-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
+        .captured-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+        .captured-card.writing { border-color: #d29922; }
+        .captured-card.classifying { border-color: #1f6feb; }
+        .captured-card.accepted { border-color: #3fb950; }
+        .captured-card.rejected { border-color: #f85149; }
+        .captured-card.transcribing { border-color: #d29922; }
+        .captured-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .captured-num { font-size: 12px; color: #8b949e; min-width: 24px; }
+        .captured-info { font-size: 12px; color: #8b949e; }
+        .spacer-sm { flex: 1; }
+
+        /* Model inference row */
+        .inference-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+        .inference-label { color: #8b949e; font-size: 11px; min-width: 50px; }
+        .inference-word { font-weight: 600; color: #3fb950; }
+        .inference-word.rejected { color: #f85149; }
+        .inference-top3 { font-size: 12px; color: #8b949e; }
+        .inference-top3 .w { color: #c9d1d9; }
+
+        /* STT / label row */
+        .label-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .label-row .lbl { color: #8b949e; font-size: 11px; min-width: 50px; }
+        .captured-word { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 8px;
+                         border-radius: 4px; font-size: 14px; width: 140px; }
+        .captured-word.stt { border-color: #3fb950; }
+        .captured-word.pending { border-color: #d29922; }
+
+        /* Audio + action buttons */
+        .action-row { display: flex; align-items: center; gap: 6px; }
+        .captured-audio { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #8b949e; }
+        .audio-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .audio-dot.has-audio { background: #3fb950; }
+        .audio-dot.no-audio { background: #f85149; }
+        .btn-sm { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #30363d; cursor: pointer; }
+        .btn-play { background: #21262d; color: #c9d1d9; }
+        .btn-play.playing { background: #da3633; border-color: #da3633; }
+        .btn-not-word { background: #21262d; color: #d29922; }
+        .btn-not-word.active { background: #d29922; color: #fff; border-color: #d29922; }
+        .btn-discard { background: #21262d; color: #f85149; }
+
+        .captured-canvas { width: 100%; height: 70px; }
+
+        /* Log */
+        #log { margin-top: 12px; font-size: 12px; color: #8b949e; max-height: 200px; overflow-y: auto;
+               background: #161b22; border-radius: 6px; padding: 8px; }
+        #log div { padding: 2px 0; border-bottom: 1px solid #21262d; }
+        .log-training { color: #a371f7; }
+        .log-result { color: #3fb950; font-weight: 600; }
+        .log-reject { color: #f85149; }
+
+        /* Updated model comparison */
+        .updated-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 13px; }
+        .updated-label { color: #a371f7; font-size: 11px; min-width: 50px; }
+        .updated-word { font-weight: 600; color: #a371f7; }
+        .delta { font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 3px; }
+        .delta.up { color: #3fb950; background: rgba(63,185,80,0.1); }
+        .delta.down { color: #f85149; background: rgba(248,81,73,0.1); }
+        .delta.same { color: #8b949e; }
+
+        /* Training stats panel */
+        #train-stats { display: none; background: #161b22; border: 1px solid #a371f7; border-radius: 8px; padding: 12px; margin: 8px 0; }
+        #train-stats h4 { font-size: 13px; color: #a371f7; margin-bottom: 8px; }
+        .stats-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+        .stat-box { text-align: center; }
+        .stat-val { font-size: 24px; font-weight: 700; color: #c9d1d9; }
+        .stat-label { font-size: 11px; color: #8b949e; }
+        .word-counts { font-size: 12px; color: #8b949e; line-height: 1.6; }
+        .word-counts .wc { display: inline-block; background: #21262d; border-radius: 4px; padding: 2px 8px; margin: 2px; }
+        .word-counts .wc .wn { color: #c9d1d9; }
+        .word-counts .wc .wc-num { color: #8b949e; }
     </style>
 </head>
 <body>
@@ -85,12 +135,6 @@
         <span id="rate">-- Hz</span>
     </header>
 
-    <div id="output-section">
-        <div id="output-label">RECOGNIZED OUTPUT</div>
-        <div id="output-sentence"></div>
-        <div id="word-count">0 words</div>
-    </div>
-
     <div id="chart-wrap"><canvas id="chart"></canvas></div>
 
     <div id="prob-bar-wrap">
@@ -98,18 +142,48 @@
         <span id="prob-label">P(writing): --</span>
     </div>
 
-    <div id="vocab"></div>
-
-    <div id="panels">
-        <div id="queue-section">
-            <h3>Word Queue (<span id="queue-count">0</span>)</h3>
-            <div id="queue-list"></div>
+    <div class="toggle-row">
+        <div class="toggle-group">
+            <span class="toggle-label">Ara Stream</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-forward" checked><span class="toggle-slider"></span></label>
         </div>
-        <div id="log-section">
-            <h3>Pipeline Log</h3>
-            <div id="log"></div>
+        <div class="toggle-group" id="training-toggle-group" style="display:none">
+            <span class="toggle-label">Training Mode</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-training"><span class="toggle-slider"></span></label>
         </div>
     </div>
+
+    <div id="controls">
+        <button id="btn-start" class="btn-start">Start Session</button>
+        <button id="btn-stop" class="btn-stop" style="display:none">Stop</button>
+        <button id="btn-save" class="btn-save" style="display:none" disabled>Save Samples</button>
+        <button id="btn-retrain" class="btn-retrain" style="display:none" disabled>Update Model</button>
+    </div>
+
+    <div id="prompt">
+        Write with the pen
+        <span class="sub">words appear as they're recognized</span>
+    </div>
+
+    <div id="status-msg"></div>
+    <div id="vocab"></div>
+
+    <div id="train-stats">
+        <h4>Model Training Results</h4>
+        <div class="stats-grid">
+            <div class="stat-box"><div class="stat-val" id="stat-samples">--</div><div class="stat-label">total samples</div></div>
+            <div class="stat-box"><div class="stat-val" id="stat-words">--</div><div class="stat-label">vocabulary</div></div>
+            <div class="stat-box"><div class="stat-val" id="stat-acc">--</div><div class="stat-label">val accuracy</div></div>
+        </div>
+        <div class="word-counts" id="word-counts"></div>
+    </div>
+
+    <section id="captured-section" style="display:none">
+        <h3>Captured Words (<span id="captured-count">0</span>)</h3>
+        <div id="captured-list"></div>
+    </section>
+
+    <div id="log"></div>
 
     <script src="/static/chart.js"></script>
     <script>
@@ -118,187 +192,356 @@
         const $rate = document.getElementById("rate");
         const $probBar = document.getElementById("prob-bar");
         const $probLabel = document.getElementById("prob-label");
-        const $outputSentence = document.getElementById("output-sentence");
-        const $wordCount = document.getElementById("word-count");
+        const $prompt = document.getElementById("prompt");
+        const $status = document.getElementById("status-msg");
         const $vocab = document.getElementById("vocab");
-        const $queueCount = document.getElementById("queue-count");
-        const $queueList = document.getElementById("queue-list");
+        const $capturedSection = document.getElementById("captured-section");
+        const $capturedCount = document.getElementById("captured-count");
+        const $capturedList = document.getElementById("captured-list");
         const $log = document.getElementById("log");
+        const $toggleForward = document.getElementById("toggle-forward");
+        const $toggleTraining = document.getElementById("toggle-training");
+        const $btnStart = document.getElementById("btn-start");
+        const $btnStop = document.getElementById("btn-stop");
+        const $btnSave = document.getElementById("btn-save");
+        const $btnRetrain = document.getElementById("btn-retrain");
 
         let ws = null;
         let prevRaw = null;
-        let wordQueue = [];    // {idx, status, samples, timestamps, duration_s, num_samples, word, confidence, top3}
-        let outputWords = [];  // accepted words
+        let completedWords = [];
         let wordCounter = 0;
         let confidence = 0.5;
+        let running = false;
+        let trainingMode = false;
+        let currentPlayingAudio = null;
 
         const chart = new AccelChart(document.getElementById("chart"));
         (function animLoop() { chart.draw(); requestAnimationFrame(animLoop); })();
 
-        // Audio context for beeps
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // ─── Audio ─────────────────────────────────────────
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        let micStream = null, micSource = null, micProcessor = null;
+        let micChunks = [], micReady = false, micRecording = false;
 
-        function beep(freq = 880, duration = 0.12) {
+        function beep(freq = 880, dur = 0.12) {
             if (audioCtx.state === "suspended") audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = freq;
-            gain.gain.value = 0.3;
-            osc.start();
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-            osc.stop(audioCtx.currentTime + duration);
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.frequency.value = freq; g.gain.value = 0.3; o.start();
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+            o.stop(audioCtx.currentTime + dur);
         }
 
-        function beepLow() { beep(440, 0.15); }
+        async function initMic() {
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micSource = audioCtx.createMediaStreamSource(micStream);
+                micProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+                micProcessor.onaudioprocess = (e) => { if (micRecording) micChunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+                micSource.connect(micProcessor);
+                micProcessor.connect(audioCtx.destination);
+                micReady = true;
+                log("Microphone ready", "log-training");
+            } catch (err) { log("Mic unavailable: " + err.message, "log-reject"); }
+        }
+        function startMicRecording() { micChunks = []; micRecording = true; if (audioCtx.state === "suspended") audioCtx.resume(); }
+        function stopMicRecording() {
+            micRecording = false;
+            if (!micReady || micChunks.length === 0) return null;
+            const len = micChunks.reduce((s, c) => s + c.length, 0);
+            const merged = new Float32Array(len); let off = 0;
+            for (const c of micChunks) { merged.set(c, off); off += c.length; }
+            micChunks = [];
+            return encodeWAV(merged, audioCtx.sampleRate);
+        }
+        function encodeWAV(samples, sr) {
+            const ds = samples.length * 2, buf = new ArrayBuffer(44 + ds), v = new DataView(buf);
+            function w(o, s) { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+            w(0,"RIFF"); v.setUint32(4,36+ds,true); w(8,"WAVE"); w(12,"fmt ");
+            v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+            v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true);
+            v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,ds,true);
+            let p = 44;
+            for (let i = 0; i < samples.length; i++) {
+                let s = Math.max(-1, Math.min(1, samples[i]));
+                v.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true); p += 2;
+            }
+            return new Blob([buf], { type: "audio/wav" });
+        }
 
-        // Logging
-        function log(msg, cls = "log-event") {
+        function playAudioBlob(blob, btn) {
+            if (currentPlayingAudio) { currentPlayingAudio.pause(); currentPlayingAudio = null; }
+            document.querySelectorAll(".btn-play.playing").forEach(b => { b.textContent = "\u25B6"; b.classList.remove("playing"); });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            currentPlayingAudio = audio;
+            btn.textContent = "\u25A0"; btn.classList.add("playing");
+            audio.onended = () => { btn.textContent = "\u25B6"; btn.classList.remove("playing"); URL.revokeObjectURL(url); currentPlayingAudio = null; };
+            audio.play();
+        }
+
+        // ─── Helpers ───────────────────────────────────────
+        function log(msg, cls = "") {
             const d = document.createElement("div");
-            d.className = cls;
-            const ts = new Date().toLocaleTimeString();
-            d.textContent = `${ts}  ${msg}`;
+            if (cls) d.className = cls;
+            d.textContent = `${new Date().toLocaleTimeString()} -- ${msg}`;
             $log.prepend(d);
-            if ($log.children.length > 100) $log.lastChild.remove();
+            if ($log.children.length > 80) $log.lastChild.remove();
         }
 
-        // Render output sentence
-        function renderOutput() {
-            $outputSentence.innerHTML = "";
-            outputWords.forEach(w => {
-                const span = document.createElement("span");
-                span.className = "word accepted";
-                span.textContent = w + " ";
-                $outputSentence.appendChild(span);
-            });
-            // Show any pending words
-            wordQueue.forEach(item => {
-                if (item.status === "writing" || item.status === "classifying") {
-                    const span = document.createElement("span");
-                    span.className = "word pending";
-                    span.textContent = (item.status === "writing" ? "..." : "?") + " ";
-                    $outputSentence.appendChild(span);
-                }
-            });
-            $wordCount.textContent = `${outputWords.length} word${outputWords.length !== 1 ? "s" : ""}`;
+        // ─── Training: upload + transcribe ─────────────────
+        async function uploadAndTranscribe(cw) {
+            if (!cw.wavBlob) return;
+            try {
+                const upResp = await fetch(`/api/training/audio/${cw.idx}`, {
+                    method: "POST", headers: { "Content-Type": "audio/wav" }, body: cw.wavBlob,
+                });
+                const upData = await upResp.json();
+                cw.audio_id = upData.audio_id;
+                cw.audio_file = `audio/${upData.audio_id}.wav`;
+                // transcribe
+                const stResp = await fetch("/api/training/transcribe", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ audio_id: upData.audio_id }),
+                });
+                const stData = await stResp.json();
+                cw.stt_text = stData.text || "";
+                cw.stt_done = true;
+                if (stData.text) cw.label = stData.text;
+                if (!stData.is_word) cw.not_a_word = true;
+                log(`#${cw.idx} STT: "${stData.text || "(silence)"}"`, "log-training");
+            } catch (err) {
+                cw.stt_done = true;
+                log(`#${cw.idx} STT error: ${err.message}`, "log-reject");
+            }
+            renderCaptured();
         }
 
-        // Render word queue
-        function renderQueue() {
-            $queueCount.textContent = wordQueue.length;
-            $queueList.innerHTML = "";
+        // ─── Render captured words ─────────────────────────
+        function renderCaptured() {
+            $capturedCount.textContent = completedWords.length;
+            $capturedSection.style.display = completedWords.length > 0 ? "" : "none";
+            $capturedList.innerHTML = "";
 
-            // Show most recent first
-            for (let i = wordQueue.length - 1; i >= 0; i--) {
-                const item = wordQueue[i];
+            for (let i = completedWords.length - 1; i >= 0; i--) {
+                const cw = completedWords[i];
                 const card = document.createElement("div");
-                card.className = "queue-card " + item.status;
+                card.className = "captured-card " + (cw.status || "");
 
+                // Header: # + duration
                 const header = document.createElement("div");
-                header.className = "queue-header";
-
+                header.className = "captured-header";
                 const num = document.createElement("span");
-                num.className = "queue-num";
-                num.textContent = `#${item.idx}`;
+                num.className = "captured-num";
+                num.textContent = `#${cw.idx}`;
                 header.appendChild(num);
 
-                const status = document.createElement("span");
-                status.className = "queue-status " + item.status;
-                if (item.status === "writing") {
-                    status.textContent = "WRITING...";
-                } else if (item.status === "classifying") {
-                    status.textContent = "CLASSIFYING...";
-                } else if (item.status === "accepted") {
-                    status.textContent = `"${item.word}" (${(item.confidence * 100).toFixed(0)}%)`;
-                } else if (item.status === "rejected") {
-                    status.textContent = `${item.word}? (${(item.confidence * 100).toFixed(0)}%) — rejected`;
-                }
-                header.appendChild(status);
-
-                if (item.duration_s != null) {
+                if (cw.duration_s != null) {
                     const info = document.createElement("span");
-                    info.className = "queue-info";
-                    info.textContent = `${item.duration_s.toFixed(2)}s / ${item.num_samples} pts`;
+                    info.className = "captured-info";
+                    info.textContent = `${cw.duration_s.toFixed(2)}s \u00b7 ${cw.num_samples} pts`;
                     header.appendChild(info);
+                }
+
+                // Status badge
+                if (cw.status === "writing") {
+                    const s = document.createElement("span");
+                    s.style.cssText = "color:#d29922; font-weight:600; font-size:13px;";
+                    s.textContent = "WRITING...";
+                    header.appendChild(s);
+                } else if (cw.status === "classifying") {
+                    const s = document.createElement("span");
+                    s.style.cssText = "color:#1f6feb; font-weight:600; font-size:13px;";
+                    s.textContent = "CLASSIFYING...";
+                    header.appendChild(s);
                 }
 
                 card.appendChild(header);
 
-                // Top 3
-                if (item.top3) {
-                    const top3div = document.createElement("div");
-                    top3div.className = "queue-top3";
-                    item.top3.forEach((r, ri) => {
-                        const rank = document.createElement("span");
-                        rank.className = "rank";
-                        rank.innerHTML = `<span class="w">${r.word}</span> <span class="p">${(r.prob * 100).toFixed(1)}%</span>`;
-                        top3div.appendChild(rank);
-                    });
-                    card.appendChild(top3div);
+                // Model inference row (original)
+                if (cw.top3) {
+                    const row = document.createElement("div");
+                    row.className = "inference-row";
+                    const lbl = document.createElement("span");
+                    lbl.className = "inference-label";
+                    lbl.textContent = cw.updated_top3 ? "Before:" : "Model:";
+                    row.appendChild(lbl);
+
+                    const word = document.createElement("span");
+                    word.className = "inference-word" + (cw.status === "rejected" && !cw.updated_top3 ? " rejected" : "");
+                    word.textContent = `"${cw.word}" (${(cw.confidence * 100).toFixed(0)}%)`;
+                    if (cw.reranked) word.textContent += ` [LLM]`;
+                    row.appendChild(word);
+
+                    const t3 = document.createElement("span");
+                    t3.className = "inference-top3";
+                    t3.innerHTML = cw.top3.map(r => `<span class="w">${r.word}</span> ${(r.prob * 100).toFixed(0)}%`).join("&ensp;");
+                    row.appendChild(t3);
+                    card.appendChild(row);
                 }
 
-                // Mini chart for completed words
-                if (item.samples && item.status !== "writing") {
+                // Updated model row (after retrain)
+                if (cw.updated_top3) {
+                    const row = document.createElement("div");
+                    row.className = "updated-row";
+                    const lbl = document.createElement("span");
+                    lbl.className = "updated-label";
+                    lbl.textContent = "After:";
+                    row.appendChild(lbl);
+
+                    const word = document.createElement("span");
+                    word.className = "updated-word";
+                    word.textContent = `"${cw.updated_word}" (${(cw.updated_confidence * 100).toFixed(0)}%)`;
+                    row.appendChild(word);
+
+                    // Delta indicator
+                    const diff = cw.updated_confidence - cw.confidence;
+                    const delta = document.createElement("span");
+                    if (Math.abs(diff) < 0.005) {
+                        delta.className = "delta same";
+                        delta.textContent = "=";
+                    } else if (diff > 0) {
+                        delta.className = "delta up";
+                        delta.textContent = `+${(diff * 100).toFixed(0)}%`;
+                    } else {
+                        delta.className = "delta down";
+                        delta.textContent = `${(diff * 100).toFixed(0)}%`;
+                    }
+                    row.appendChild(delta);
+
+                    const t3 = document.createElement("span");
+                    t3.className = "inference-top3";
+                    t3.innerHTML = cw.updated_top3.map(r => `<span class="w">${r.word}</span> ${(r.prob * 100).toFixed(0)}%`).join("&ensp;");
+                    row.appendChild(t3);
+                    card.appendChild(row);
+                }
+
+                // STT label row (training mode)
+                if (trainingMode && cw.samples) {
+                    const row = document.createElement("div");
+                    row.className = "label-row";
+
+                    const lbl = document.createElement("span");
+                    lbl.className = "lbl";
+                    lbl.textContent = "Label:";
+                    row.appendChild(lbl);
+
+                    const inp = document.createElement("input");
+                    inp.type = "text";
+                    inp.className = "captured-word" + (cw.stt_done ? (cw.stt_text ? " stt" : "") : " pending");
+                    inp.value = cw.label || "";
+                    inp.placeholder = cw.stt_done ? "type label..." : "transcribing...";
+                    inp.autocomplete = "off"; inp.spellcheck = false;
+                    inp.addEventListener("input", () => { cw.label = inp.value.trim().toLowerCase(); });
+                    row.appendChild(inp);
+
+                    if (cw.stt_done && cw.stt_text) {
+                        const tag = document.createElement("span");
+                        tag.style.cssText = "font-size:11px; color:#3fb950;";
+                        tag.textContent = `11Labs: "${cw.stt_text}"`;
+                        row.appendChild(tag);
+                    } else if (!cw.stt_done && cw.wavBlob) {
+                        const tag = document.createElement("span");
+                        tag.style.cssText = "font-size:11px; color:#d29922;";
+                        tag.textContent = "transcribing...";
+                        row.appendChild(tag);
+                    }
+
+                    card.appendChild(row);
+                }
+
+                // Action row: audio + buttons
+                if (cw.samples && cw.status !== "writing") {
+                    const row = document.createElement("div");
+                    row.className = "action-row";
+
+                    // Audio badge + play
+                    const badge = document.createElement("span");
+                    badge.className = "captured-audio";
+                    const dot = document.createElement("span");
+                    dot.className = "audio-dot " + (cw.wavBlob ? "has-audio" : "no-audio");
+                    badge.appendChild(dot);
+                    badge.appendChild(document.createTextNode(cw.wavBlob ? "audio" : "no audio"));
+                    row.appendChild(badge);
+
+                    if (cw.wavBlob) {
+                        const playBtn = document.createElement("button");
+                        playBtn.className = "btn-sm btn-play";
+                        playBtn.textContent = "\u25B6";
+                        playBtn.addEventListener("click", () => playAudioBlob(cw.wavBlob, playBtn));
+                        row.appendChild(playBtn);
+                    }
+
+                    if (trainingMode) {
+                        const nwBtn = document.createElement("button");
+                        nwBtn.className = "btn-sm btn-not-word" + (cw.not_a_word ? " active" : "");
+                        nwBtn.textContent = "not a word";
+                        nwBtn.addEventListener("click", () => { cw.not_a_word = !cw.not_a_word; renderCaptured(); });
+                        row.appendChild(nwBtn);
+
+                        row.appendChild(Object.assign(document.createElement("span"), { className: "spacer-sm" }));
+
+                        const delBtn = document.createElement("button");
+                        delBtn.className = "btn-sm btn-discard";
+                        delBtn.textContent = "\u2715";
+                        delBtn.addEventListener("click", () => { completedWords.splice(i, 1); renderCaptured(); });
+                        row.appendChild(delBtn);
+                    }
+
+                    card.appendChild(row);
+                }
+
+                // Mini accel chart
+                if (cw.samples && cw.status !== "writing") {
                     const canvas = document.createElement("canvas");
-                    canvas.className = "queue-canvas";
+                    canvas.className = "captured-canvas";
                     card.appendChild(canvas);
                     requestAnimationFrame(() => {
-                        const miniChart = new AccelChart(canvas, {
-                            windowSec: Math.max((item.duration_s || 0.5) * 1.1, 0.5),
-                            autoScale: true,
-                        });
+                        const mc = new AccelChart(canvas, { windowSec: Math.max((cw.duration_s || 0.5) * 1.1, 0.5), autoScale: true });
                         const deltas = [];
-                        for (let j = 1; j < item.samples.length; j++) {
+                        for (let j = 1; j < cw.samples.length; j++) {
                             deltas.push({
-                                x: item.samples[j][0] - item.samples[j - 1][0],
-                                y: item.samples[j][1] - item.samples[j - 1][1],
-                                z: item.samples[j][2] - item.samples[j - 1][2],
-                                t: item.timestamps[j],
+                                x: cw.samples[j][0] - cw.samples[j - 1][0],
+                                y: cw.samples[j][1] - cw.samples[j - 1][1],
+                                z: cw.samples[j][2] - cw.samples[j - 1][2],
+                                t: cw.timestamps[j],
                             });
                         }
-                        miniChart.setData(deltas);
-                        miniChart.draw();
+                        mc.setData(deltas); mc.draw();
                     });
                 }
 
-                $queueList.appendChild(card);
+                $capturedList.appendChild(card);
             }
         }
 
-        // WebSocket
+        // ─── WebSocket ─────────────────────────────────────
         function connectWS() {
             const proto = location.protocol === "https:" ? "wss:" : "ws:";
             ws = new WebSocket(`${proto}//${location.host}/ws`);
 
             ws.onmessage = (evt) => {
                 const data = JSON.parse(evt.data);
-
                 switch (data.type) {
                     case "status":
                         $dot.className = "dot " + (data.connected ? "connected" : "disconnected");
                         $conn.textContent = data.connected ? `Connected: ${data.port}` : "Disconnected";
                         $rate.textContent = data.connected ? `${data.sample_rate_hz} Hz` : "-- Hz";
-                        log(data.connected ? `Connected to ${data.port}` : "Disconnected", "log-status");
                         break;
-
                     case "config":
                         confidence = data.confidence;
-                        $vocab.textContent = `Vocabulary: ${data.vocabulary.join(", ")}  |  Confidence threshold: ${(confidence * 100).toFixed(0)}%`;
+                        $vocab.textContent = `Vocabulary: ${data.vocabulary.join(", ")}  |  Confidence: ${(confidence * 100).toFixed(0)}%`;
+                        if (data.training_available) document.getElementById("training-toggle-group").style.display = "";
+                        $toggleForward.checked = data.forward_enabled;
                         break;
-
+                    case "forward_state":
+                        $toggleForward.checked = data.enabled;
+                        log(`Ara stream ${data.enabled ? "enabled" : "disabled"}`);
+                        break;
                     case "accel":
-                        if (prevRaw) {
-                            chart.push({
-                                x: data.x - prevRaw.x,
-                                y: data.y - prevRaw.y,
-                                z: data.z - prevRaw.z,
-                                t: data.t,
-                            });
-                        }
+                        if (prevRaw) chart.push({ x: data.x - prevRaw.x, y: data.y - prevRaw.y, z: data.z - prevRaw.z, t: data.t });
                         prevRaw = { x: data.x, y: data.y, z: data.z };
                         break;
-
                     case "prob": {
                         const pct = Math.round(data.p * 100);
                         $probBar.style.width = pct + "%";
@@ -306,91 +549,213 @@
                         $probLabel.textContent = `P(writing): ${pct}%`;
                         break;
                     }
-
                     case "word_start": {
+                        if (!running) break;
                         wordCounter++;
-                        const item = { idx: wordCounter, status: "writing" };
-                        wordQueue.push(item);
-                        log(`#${wordCounter}  WORD STARTED`, "log-word-start");
-                        renderQueue();
-                        renderOutput();
+                        const cw = { idx: wordCounter, status: "writing" };
+                        completedWords.push(cw);
+                        if (trainingMode) startMicRecording();
+                        $prompt.innerHTML = `<span>...</span><span class="sub">writing detected</span>`;
+                        $prompt.className = "writing";
+                        log(`#${wordCounter} writing detected`);
+                        renderCaptured();
                         break;
                     }
-
                     case "word_end": {
+                        if (!running) break;
                         beep();
-                        // Find the most recent "writing" item
-                        let item = null;
-                        for (let i = wordQueue.length - 1; i >= 0; i--) {
-                            if (wordQueue[i].status === "writing") {
-                                item = wordQueue[i];
-                                break;
-                            }
+                        let cw = null;
+                        for (let i = completedWords.length - 1; i >= 0; i--) {
+                            if (completedWords[i].status === "writing") { cw = completedWords[i]; break; }
                         }
-                        if (!item) {
-                            // Edge case: word_end without word_start (segmenter state)
-                            wordCounter++;
-                            item = { idx: wordCounter };
-                            wordQueue.push(item);
-                        }
-                        item.status = "classifying";
-                        item.samples = data.samples;
-                        item.timestamps = data.timestamps;
-                        item.duration_s = data.duration_s;
-                        item.num_samples = data.num_samples;
+                        if (!cw) { wordCounter++; cw = { idx: wordCounter }; completedWords.push(cw); }
+                        cw.status = "classifying";
+                        cw.samples = data.samples;
+                        cw.timestamps = data.timestamps;
+                        cw.duration_s = data.duration_s;
+                        cw.num_samples = data.num_samples;
 
-                        log(`#${item.idx}  WORD DETECTED  (${data.num_samples} samples, ${data.duration_s}s)`, "log-word-end");
-                        log(`#${item.idx}  CLASSIFYING...`, "log-classify");
+                        // Capture audio
+                        if (trainingMode) cw.wavBlob = stopMicRecording();
 
-                        renderQueue();
-                        renderOutput();
+                        $prompt.innerHTML = `<span>#${cw.idx}</span><span class="sub">${data.num_samples} samples, ${data.duration_s}s</span>`;
+                        $prompt.className = "flash";
+                        log(`#${cw.idx} word detected (${data.num_samples} pts, ${data.duration_s}s)`);
+                        renderCaptured();
 
-                        // Send to server for classification
-                        ws.send(JSON.stringify({
-                            type: "classify",
-                            word_idx: item.idx,
-                            samples: data.samples,
-                        }));
+                        // Classify
+                        ws.send(JSON.stringify({ type: "classify", word_idx: cw.idx, samples: data.samples }));
+
+                        // Transcribe in parallel
+                        if (trainingMode && cw.wavBlob) uploadAndTranscribe(cw);
                         break;
                     }
-
+                    case "reranking": {
+                        const cw = completedWords.find(w => w.idx === data.word_idx);
+                        if (cw) { cw.status = "reranking"; log(`#${cw.idx} reranking (LLM)...`); renderCaptured(); }
+                        break;
+                    }
                     case "classification": {
-                        const item = wordQueue.find(w => w.idx === data.word_idx);
-                        if (!item) break;
+                        const cw = completedWords.find(w => w.idx === data.word_idx);
+                        if (!cw) break;
+                        cw.word = data.word;
+                        cw.confidence = data.confidence;
+                        cw.top3 = data.top3;
+                        cw.reranked = data.reranked || false;
+                        cw.original_word = data.original_word || null;
+                        // Pre-fill label from classifier if no STT yet
+                        if (trainingMode && !cw.label && !cw.stt_text) cw.label = data.word;
 
-                        item.word = data.word;
-                        item.confidence = data.confidence;
-                        item.top3 = data.top3;
-
-                        const top3Str = data.top3.map(r => `${r.word} ${(r.prob * 100).toFixed(0)}%`).join("  ");
-
+                        const t3 = data.top3.map(r => `${r.word} ${(r.prob * 100).toFixed(0)}%`).join("  ");
                         if (data.accepted) {
-                            item.status = "accepted";
-                            outputWords.push(data.word);
+                            cw.status = "accepted";
                             beep(660, 0.08);
-                            log(`#${item.idx}  WORD IS: "${data.word}"  (${(data.confidence * 100).toFixed(0)}%)  [${top3Str}]`, "log-result");
+                            $prompt.innerHTML = `<span>${data.word}</span><span class="sub">${(data.confidence * 100).toFixed(0)}% confidence</span>`;
+                            let msg = `#${cw.idx} "${data.word}" (${(data.confidence * 100).toFixed(0)}%)  [${t3}]`;
+                            if (data.reranked) msg += ` [LLM: was "${data.original_word}"]`;
+                            log(msg, "log-result");
                         } else {
-                            item.status = "rejected";
-                            beepLow();
-                            log(`#${item.idx}  LOW CONFIDENCE: "${data.word}" (${(data.confidence * 100).toFixed(0)}%)  [${top3Str}]`, "log-reject");
+                            cw.status = "rejected";
+                            beep(440, 0.15);
+                            log(`#${cw.idx} low: "${data.word}" (${(data.confidence * 100).toFixed(0)}%)  [${t3}]`, "log-reject");
                         }
-
-                        log(`TOTAL WORDS: ${outputWords.length}`, "log-event");
-                        renderQueue();
-                        renderOutput();
+                        renderCaptured();
                         break;
                     }
                 }
             };
-
-            ws.onclose = () => {
-                $dot.className = "dot disconnected";
-                $conn.textContent = "Reconnecting...";
-                setTimeout(connectWS, 2000);
-            };
+            ws.onclose = () => { $dot.className = "dot disconnected"; $conn.textContent = "Reconnecting..."; setTimeout(connectWS, 2000); };
             ws.onerror = () => ws.close();
         }
         connectWS();
+
+        // ─── Controls ──────────────────────────────────────
+        $toggleForward.addEventListener("change", () => {
+            ws.send(JSON.stringify({ type: "toggle_forward", enabled: $toggleForward.checked }));
+        });
+
+        $toggleTraining.addEventListener("change", () => {
+            trainingMode = $toggleTraining.checked;
+            if (trainingMode && !micReady) initMic();
+            $btnSave.style.display = trainingMode ? "" : "none";
+            $btnRetrain.style.display = trainingMode ? "" : "none";
+            log(`Training mode ${trainingMode ? "ON" : "OFF"}`, "log-training");
+            renderCaptured();
+        });
+
+        $btnStart.addEventListener("click", () => {
+            running = true;
+            completedWords = [];
+            wordCounter = 0;
+            $btnStart.style.display = "none";
+            $btnStop.style.display = "";
+            $btnSave.disabled = true;
+            $btnRetrain.disabled = true;
+            $prompt.innerHTML = `<span>Ready</span><span class="sub">${trainingMode ? "write and say words aloud" : "start writing"}</span>`;
+            $prompt.className = "";
+            $status.textContent = "";
+            if (trainingMode && !micReady) initMic();
+            log("Session started" + (trainingMode ? " (training)" : ""), "log-training");
+            renderCaptured();
+        });
+
+        $btnStop.addEventListener("click", () => {
+            running = false;
+            stopMicRecording();
+            $btnStart.style.display = "";
+            $btnStop.style.display = "none";
+            if (trainingMode) {
+                $btnSave.disabled = false;
+                const labeled = completedWords.filter(c => c.samples && c.label && !c.not_a_word).length;
+                $status.textContent = `${completedWords.length} samples captured, ${labeled} labeled. Review and save.`;
+            }
+            $prompt.innerHTML = `<span>Stopped</span><span class="sub">${completedWords.length} words</span>`;
+            log("Session stopped");
+            renderCaptured();
+        });
+
+        $btnSave.addEventListener("click", async () => {
+            $btnSave.disabled = true;
+            const labeled = completedWords.filter(c => c.samples && c.label && !c.not_a_word);
+            if (labeled.length === 0) { $status.textContent = "No labeled samples to save."; return; }
+            const payload = labeled.map(c => ({
+                word: c.label, samples: c.samples, timestamps: c.timestamps, audio_file: c.audio_file || null,
+            }));
+            try {
+                const resp = await fetch("/api/training/save", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ samples: payload }),
+                });
+                const data = await resp.json();
+                $status.textContent = `Saved ${data.saved} samples to ${data.file}`;
+                $btnRetrain.disabled = false;
+                log(`Saved ${data.saved} samples`, "log-training");
+            } catch (err) { $status.textContent = "Save error: " + err.message; }
+        });
+
+        $btnRetrain.addEventListener("click", async () => {
+            $btnRetrain.disabled = true;
+            $status.textContent = "Retraining model...";
+            log("Retraining model...", "log-training");
+            try {
+                const resp = await fetch("/api/training/retrain", { method: "POST" });
+                const data = await resp.json();
+                if (data.error) {
+                    $status.textContent = `Retrain error: ${data.error}`;
+                    $btnRetrain.disabled = false;
+                    return;
+                }
+
+                // Show training stats panel
+                document.getElementById("stat-samples").textContent = data.total_samples;
+                document.getElementById("stat-words").textContent = data.num_words;
+                document.getElementById("stat-acc").textContent = (data.val_acc * 100).toFixed(0) + "%";
+                const wcDiv = document.getElementById("word-counts");
+                wcDiv.innerHTML = "";
+                const sorted = Object.entries(data.word_counts).sort((a, b) => b[1] - a[1]);
+                for (const [w, n] of sorted) {
+                    const chip = document.createElement("span");
+                    chip.className = "wc";
+                    chip.innerHTML = `<span class="wn">${w}</span> <span class="wc-num">\u00d7${n}</span>`;
+                    wcDiv.appendChild(chip);
+                }
+                document.getElementById("train-stats").style.display = "";
+
+                $vocab.textContent = `Vocabulary: ${data.vocabulary.join(", ")}  |  Confidence: ${(confidence * 100).toFixed(0)}%`;
+                log(`Model updated: ${data.num_words} words, ${data.total_samples} samples, val_acc=${(data.val_acc * 100).toFixed(0)}%`, "log-training");
+                beep(1200, 0.2);
+
+                // Reclassify all captured words with the new model
+                const toReclassify = completedWords.filter(c => c.samples);
+                if (toReclassify.length > 0) {
+                    $status.textContent = "Reclassifying with updated model...";
+                    const items = toReclassify.map(c => ({ word_idx: c.idx, samples: c.samples }));
+                    const rcResp = await fetch("/api/training/reclassify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ items }),
+                    });
+                    const rcData = await rcResp.json();
+                    for (const r of rcData.results) {
+                        const cw = completedWords.find(c => c.idx === r.word_idx);
+                        if (cw) {
+                            cw.updated_word = r.word;
+                            cw.updated_confidence = r.confidence;
+                            cw.updated_top3 = r.top3;
+                        }
+                    }
+                    renderCaptured();
+                    const improved = rcData.results.filter((r, i) => {
+                        const cw = completedWords.find(c => c.idx === r.word_idx);
+                        return cw && r.confidence > cw.confidence;
+                    }).length;
+                    log(`Reclassified ${rcData.results.length} words — ${improved} improved`, "log-training");
+                }
+
+                $status.textContent = `Model updated: ${data.num_words} words, ${data.total_samples} samples, val_acc=${(data.val_acc * 100).toFixed(0)}%`;
+            } catch (err) { $status.textContent = "Retrain error: " + err.message; }
+            $btnRetrain.disabled = false;
+        });
     </script>
 </body>
 </html>

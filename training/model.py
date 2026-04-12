@@ -73,6 +73,44 @@ class WordClassifier(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# Word validator: binary classifier — is this a word or not?
+# ---------------------------------------------------------------------------
+
+class WordValidator(nn.Module):
+    """
+    Binary classifier: is this accelerometer segment a real word?
+
+    Same CNN backbone as WordClassifier but with a single sigmoid output.
+
+    Input : (batch, time, features)   — features = 10 by default
+    Output: (batch,)                  — logit, apply sigmoid for P(word)
+    """
+
+    def __init__(self, num_features=10):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            ConvBlock(num_features, 32, kernel_size=5, padding=2),
+            ConvBlock(32, 64, kernel_size=5, padding=2),
+            ConvBlock(64, 128, kernel_size=3, padding=1),
+        )
+        self.head = nn.Linear(128, 1)
+
+    def forward(self, x, lengths=None):
+        x = x.transpose(1, 2)
+        x = self.encoder(x)
+
+        if lengths is not None:
+            max_len = x.size(2)
+            mask = torch.arange(max_len, device=x.device).unsqueeze(0) < lengths.unsqueeze(1)
+            mask = mask.unsqueeze(1).float()
+            x = (x * mask).sum(dim=2) / mask.sum(dim=2).clamp(min=1)
+        else:
+            x = x.mean(dim=2)
+
+        return self.head(x).squeeze(1)
+
+
+# ---------------------------------------------------------------------------
 # Phase 2: Character-level CTC recognizer
 # ---------------------------------------------------------------------------
 

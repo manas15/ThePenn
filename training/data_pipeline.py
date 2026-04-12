@@ -25,12 +25,10 @@ from .dataset import load_samples, load_all_samples
 
 def trim_idle(samples_xyz, margin=3, min_len=20):
     """
-    Trim leading idle from raw [[x,y,z], ...] data.
+    Trim leading and trailing idle from raw [[x,y,z], ...] data.
 
     Compares energy in a sliding window against the peak writing energy
-    (middle of the sample) to find where actual writing begins. Only
-    trims the leading portion — trailing is already handled by the
-    auto-segmenter.
+    (middle of the sample) to find where actual writing begins and ends.
     """
     arr = np.array(samples_xyz, dtype=np.float32)
     if len(arr) < min_len:
@@ -58,7 +56,8 @@ def trim_idle(samples_xyz, margin=3, min_len=20):
     if threshold < 0.05:
         return samples_xyz
 
-    # Find first point where smoothed energy exceeds threshold
+    # Find first point where smoothed energy exceeds threshold (leading trim only)
+    # Trailing idle is already handled by the segmenter's gap detection
     start = 0
     for i in range(len(smooth)):
         if smooth[i] > threshold:
@@ -68,7 +67,6 @@ def trim_idle(samples_xyz, margin=3, min_len=20):
     if start < 3:
         return samples_xyz  # nothing meaningful to trim
 
-    # Ensure we keep enough samples
     if len(arr) - start < min_len:
         return samples_xyz
 
