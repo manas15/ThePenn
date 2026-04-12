@@ -25,6 +25,9 @@ PROJECT_ROOT = str(Path(__file__).resolve().parent)
 
 NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
 
+# WebSocket clients listening for pen words (registered by /ws/pen)
+pen_subscribers: set[web.WebSocketResponse] = set()
+
 
 async def notes_page(request):
     return web.FileResponse(STATIC_DIR / "notes.html", headers=NO_CACHE)
@@ -85,6 +88,37 @@ async def api_ara(request):
         return web.json_response({"text": f"Failed: {e}", "error": True})
 
 
+async def api_push_word(request):
+    """
+    POST /api/word — receive a confirmed word from pennference and broadcast
+    to all connected /ws/pen clients.
+
+    Body: {"word": "hello", "confidence": 0.85}
+    """
+    data = await request.json()
+    word = data.get("word", "").strip()
+    confidence = data.get("confidence", 0.0)
+    if not word:
+        return web.json_response({"error": "missing word"}, status=400)
+
+    conf_str = f"{confidence:.0%}" if isinstance(confidence, float) else str(confidence)
+    msg = json.dumps({"type": "word", "word": word, "confidence": conf_str})
+
+    closed = set()
+    for ws in pen_subscribers:
+        if ws.closed:
+            closed.add(ws)
+            continue
+        try:
+            await ws.send_str(msg)
+        except Exception:
+            closed.add(ws)
+    pen_subscribers.difference_update(closed)
+
+    print(f"[word] '{word}' ({conf_str}) -> {len(pen_subscribers)} client(s)")
+    return web.json_response({"ok": True})
+
+
 async def ws_pen(request):
     """
     WebSocket endpoint for live pen streaming.
@@ -93,6 +127,7 @@ async def ws_pen(request):
     """
     ws_resp = web.WebSocketResponse()
     await ws_resp.prepare(request)
+    pen_subscribers.add(ws_resp)
 
     proc = None
 
@@ -219,6 +254,7 @@ async def ws_pen(request):
     except Exception as e:
         print(f"[pen] ws error: {e}")
     finally:
+        pen_subscribers.discard(ws_resp)
         if proc and proc.returncode is None:
             proc.terminate()
 
@@ -229,6 +265,7 @@ app = web.Application()
 app.router.add_get("/", notes_page)
 app.router.add_get("/static/{filename}", static_handler)
 app.router.add_post("/api/ara", api_ara)
+app.router.add_post("/api/word", api_push_word)
 app.router.add_get("/ws/pen", ws_pen)
 
 if __name__ == "__main__":

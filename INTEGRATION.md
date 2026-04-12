@@ -61,11 +61,15 @@ Ara stores notes per subject so you can request flashcards/summaries for specifi
 ## How the Live Pen → Notes UI → Ara pipeline works
 
 ```
-Arduino + Pen  →  pennference.py  →  notes_server.py  →  Browser UI  →  Ara Agent
-  (serial)        (segmenter +       (WebSocket          (notes.html)    (flashcards,
-                   classifier)        bridge)                             summaries,
-                                                                         quizzes)
+Arduino + Pen  →  pennference.py (port 8768)  →  POST /api/word  →  notes_server.py (port 8767)  →  Browser UI  →  Ara Agent
+  (serial)        (segmenter + classifier          (HTTP)            (WebSocket broadcast)           (notes.html)    (flashcards,
+                   + dashboard)                                                                                       summaries,
+                                                                                                                      quizzes)
 ```
+
+pennference.py runs as its own server with a live dashboard. When it classifies a
+word above the confidence threshold, it POSTs `{"word": "...", "confidence": 0.85}`
+to `notes_server.py`'s `/api/word` endpoint, which broadcasts it to the notes UI.
 
 ## Quick Start
 
@@ -73,44 +77,44 @@ Arduino + Pen  →  pennference.py  →  notes_server.py  →  Browser UI  →  
 # Terminal 1: Start the notes server
 export ARA_API_KEY=<your-key>
 export ARA_RUNTIME_KEY=<your-key>
-python3 notes_server.py
+python3 notes_server.py              # http://localhost:8767
 
-# Open http://localhost:8767 in your browser
-# Click "Start Live Pen" — this launches pennference.py in the background
-# Write with the pen — recognized words appear in real time
-# Click "Save to Ara" to send notes to the study agent
+# Terminal 2: Start pennference
+python3 pennference.py               # dashboard at http://localhost:8768
+                                      # auto-forwards words to localhost:8767
+
+# Open http://localhost:8767 in your browser for the notes UI
+# Open http://localhost:8768 for the pennference pipeline dashboard
+# Write with the pen — words appear in both UIs
 ```
 
 ## How Live Pen Streaming Works
 
-When the user clicks **"Start Live Pen"** in the browser:
-
-1. Browser opens a WebSocket to `ws://localhost:8767/ws/pen`
-2. Server launches `pennference.py` as a subprocess
-3. `pennference.py` reads the Arduino serial port, runs the segmenter + classifier
-4. Server parses stdout from pennference.py looking for recognized words
-5. Each recognized word is pushed to the browser via WebSocket as:
-   ```json
-   {"type": "word", "word": "mitosis", "confidence": "85%"}
+1. `pennference.py` reads the Arduino serial port, runs SegmentationTCN + WordClassifier
+2. Its dashboard at `http://localhost:8768` shows the live pipeline (accel chart, P(writing), word queue)
+3. When a word is classified above the confidence threshold, pennference POSTs to `notes_server.py`:
    ```
-6. The browser's `addWord()` function appends it to the notes display
+   POST http://localhost:8767/api/word
+   {"word": "mitosis", "confidence": 0.85}
+   ```
+4. `notes_server.py` broadcasts `{"type": "word", "word": "mitosis", "confidence": "85%"}` to all connected `/ws/pen` WebSocket clients
+5. The browser's `addWord()` function appends it to the notes display
 
-## pennference.py Output Format
-
-The server parses these patterns from pennference.py stdout:
-
-| stdout pattern | What it means |
-|---|---|
-| `WORD STARTED` | Pen started writing (segmenter detected motion) |
-| `WORD IS: <word>  (<confidence>%)` | A word was classified above the confidence threshold |
-| `LOW CONFIDENCE: <word>  (<confidence>%) -- skipped` | Classification below threshold |
-| `>>> word1 word2 word3` | Accumulated sentence so far |
+The "Start Live Pen" button in the notes UI can also launch pennference as a subprocess (legacy mode).
 
 ## Adding Words Programmatically
 
-If you want to push words from a different source (e.g. a custom classifier, a different serial reader), you have two options:
+### Option A: POST to `/api/word` (recommended)
 
-### Option A: Call `window.pushWord()` from JavaScript
+```bash
+curl -X POST http://localhost:8767/api/word \
+  -H "Content-Type: application/json" \
+  -d '{"word":"hello","confidence":0.9}'
+```
+
+This is what pennference.py uses internally. Any source can push words this way.
+
+### Option B: Call `window.pushWord()` from JavaScript
 
 In the browser console or from your own script loaded in the page:
 
@@ -119,27 +123,9 @@ window.pushWord("hello");   // adds "hello" to the notes
 window.pushWord("world");   // adds "world"
 ```
 
-### Option B: Send words via WebSocket
+### Option C: Connect via WebSocket
 
-Connect to `ws://localhost:8767/ws/pen` and the server will forward words.
-Or modify `notes_server.py` to accept words from your own WebSocket/HTTP endpoint.
-
-### Option C: POST words via HTTP (simple)
-
-If you prefer HTTP, add a route to `notes_server.py`:
-
-```python
-async def api_push_word(request):
-    data = await request.json()
-    word = data.get("word", "")
-    # Broadcast to connected WebSocket clients
-    ...
-```
-
-Then call it:
-```bash
-curl -X POST http://localhost:8767/api/word -H "Content-Type: application/json" -d '{"word":"hello"}'
-```
+Connect to `ws://localhost:8767/ws/pen` — words from `/api/word` are broadcast to all connected clients.
 
 ## Ara Agent
 
@@ -167,11 +153,12 @@ Actions available from the UI:
 
 ```
 ThePenn/
-├── notes_server.py          # Web server (UI + Ara + pen WebSocket)
+├── notes_server.py          # Notes UI server (port 8767) + Ara + /api/word endpoint
+├── pennference.py           # Inference pipeline + dashboard (port 8768), POSTs to notes_server
 ├── ara_app.py               # Ara agent definition (tools + study agent)
-├── pennference.py           # Ryan's inference pipeline (serial → words)
 ├── training/static/
-│   └── notes.html           # Browser UI
+│   ├── notes.html           # Notes browser UI
+│   └── pennference.html     # Pennference pipeline dashboard
 ├── segmenter.pt             # Segmentation model weights
 └── models/
     └── word_classifier_best.pt  # Classifier model weights

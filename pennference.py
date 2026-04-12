@@ -26,6 +26,7 @@ import time
 from collections import deque
 from pathlib import Path
 
+import aiohttp
 import numpy as np
 import torch
 from aiohttp import web
@@ -39,6 +40,7 @@ SEGMENTER_PATH = Path(__file__).resolve().parent / "segmenter.pt"
 CLASSIFIER_PATH = Path(__file__).resolve().parent / "models" / "word_classifier_best.pt"
 
 DEFAULT_CONFIDENCE = 0.5
+DEFAULT_NOTES_URL = "http://localhost:8767/api/word"
 
 # Segmentation parameters
 BUFFER_SIZE = 256
@@ -257,12 +259,32 @@ def classify_word_sync(cls_model, idx_to_word, samples_xyz, device):
 # Web app
 # ---------------------------------------------------------------------------
 
-def build_app(reader, cls_model, idx_to_word, device, confidence):
+async def forward_word(session, notes_url, word, confidence):
+    """POST a confirmed word to the notes server. Fire-and-forget."""
+    try:
+        async with session.post(notes_url, json={
+            "word": word,
+            "confidence": confidence,
+        }) as resp:
+            if resp.status == 200:
+                print(f"[forward] '{word}' -> {notes_url}")
+            else:
+                print(f"[forward] '{word}' got status {resp.status}")
+    except Exception as e:
+        print(f"[forward] '{word}' failed: {e}")
+
+
+def build_app(reader, cls_model, idx_to_word, device, confidence, notes_url):
     app = web.Application()
 
     async def on_startup(app):
         reader.loop = asyncio.get_running_loop()
+        app["http_session"] = aiohttp.ClientSession()
     app.on_startup.append(on_startup)
+
+    async def on_cleanup(app):
+        await app["http_session"].close()
+    app.on_cleanup.append(on_cleanup)
 
     async def index(request):
         return web.FileResponse(STATIC_DIR / "pennference.html")
@@ -320,14 +342,21 @@ def build_app(reader, cls_model, idx_to_word, device, confidence):
                             None, classify_word_sync,
                             cls_model, idx_to_word, samples, device)
 
+                        accepted = conf >= confidence
                         await ws.send_str(json.dumps({
                             "type": "classification",
                             "word_idx": word_idx,
                             "word": word,
                             "confidence": conf,
                             "top3": top3,
-                            "accepted": conf >= confidence,
+                            "accepted": accepted,
                         }))
+
+                        # Forward accepted words to notes server
+                        if accepted and notes_url:
+                            asyncio.create_task(
+                                forward_word(request.app["http_session"],
+                                             notes_url, word, conf))
 
                 elif msg.type == web.WSMsgType.ERROR:
                     break
@@ -348,11 +377,16 @@ def build_app(reader, cls_model, idx_to_word, device, confidence):
 
 def main():
     parser = argparse.ArgumentParser(description="ThePenn inference dashboard")
-    parser.add_argument("--port", type=str, default=None)
-    parser.add_argument("--http-port", type=int, default=8767)
+    parser.add_argument("--port", type=str, default=None,
+                        help="Serial port (auto-detect if omitted)")
+    parser.add_argument("--http-port", type=int, default=8768,
+                        help="Dashboard port (default: 8768)")
     parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE)
     parser.add_argument("--segmenter", type=str, default=str(SEGMENTER_PATH))
     parser.add_argument("--classifier", type=str, default=str(CLASSIFIER_PATH))
+    parser.add_argument("--notes-url", type=str, default=DEFAULT_NOTES_URL,
+                        help=f"URL to POST confirmed words (default: {DEFAULT_NOTES_URL}). "
+                             "Set to empty string to disable forwarding.")
     args = parser.parse_args()
 
     if not Path(args.segmenter).exists():
@@ -386,13 +420,16 @@ def main():
     print(f"Confidence: {args.confidence:.0%}")
     print()
 
+    notes_url = args.notes_url.strip() or None
+
     segmenter = AutoSegmenter(seg_model, device)
     reader = SerialReader(args.port, None, segmenter)
-    app = build_app(reader, cls_model, idx_to_word, device, args.confidence)
+    app = build_app(reader, cls_model, idx_to_word, device, args.confidence, notes_url)
 
     print(f"Pennference Dashboard")
-    print(f"  Serial: {args.port or 'auto-detect'}")
-    print(f"  UI: http://localhost:{args.http_port}")
+    print(f"  Serial:    {args.port or 'auto-detect'}")
+    print(f"  Dashboard: http://localhost:{args.http_port}")
+    print(f"  Forward:   {notes_url or 'disabled'}")
     print()
 
     try:
