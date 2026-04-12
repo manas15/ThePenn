@@ -269,6 +269,136 @@ def classify_word_sync(cls_model, idx_to_word, samples_xyz, device):
 
 
 # ---------------------------------------------------------------------------
+# Fine-tune / retrain classifier
+# ---------------------------------------------------------------------------
+
+def retrain_classifier_sync(data_dir, models_dir, device):
+    """
+    Fine-tune the classifier on all available data (original + new sessions).
+    Uses heavy augmentation for new session data, mixes in original data.
+    Returns dict with the new model + metadata, ready for hot-swap.
+    """
+    import random
+    import torch.nn as nn
+    from torch.utils.data import DataLoader
+    from training.dataset import load_all_samples
+    from training.data_pipeline import WordDataset, collate_word, augment
+
+    # Load all available samples
+    all_samples = load_all_samples(data_dir)
+    if not all_samples:
+        raise ValueError("No training samples found")
+
+    # Build vocabulary
+    all_words = sorted(set(s["word"].lower() for s in all_samples))
+    word_to_idx = {w: i for i, w in enumerate(all_words)}
+    idx_to_word = {i: w for w, i in word_to_idx.items()}
+    num_words = len(word_to_idx)
+
+    # Count per word
+    word_counts = {}
+    for s in all_samples:
+        w = s["word"].lower()
+        word_counts[w] = word_counts.get(w, 0) + 1
+
+    print(f"[finetune] {len(all_samples)} samples, {num_words} words")
+
+    # Load existing model as starting point (if it exists)
+    base_model_path = os.path.join(models_dir, "word_classifier_best.pt")
+    model = WordClassifier(num_features=10, num_words=num_words).to(device)
+
+    if os.path.exists(base_model_path):
+        try:
+            ckpt = torch.load(base_model_path, weights_only=False, map_location=device)
+            if ckpt.get("num_words") == num_words:
+                model.load_state_dict(ckpt["model_state_dict"])
+                print(f"[finetune] loaded base model (fine-tuning)")
+            else:
+                print(f"[finetune] vocab changed ({ckpt.get('num_words')} -> {num_words}), training from scratch")
+        except Exception as e:
+            print(f"[finetune] could not load base model: {e}, training from scratch")
+
+    # Build augmented dataset (20x augmentation)
+    class AugDS(torch.utils.data.Dataset):
+        def __init__(self, samples, w2i, factor=20):
+            self.samples = [s for s in samples if s["word"].lower() in w2i]
+            self.w2i = w2i
+            self.factor = factor
+            self.rng = random.Random(42)
+        def __len__(self):
+            return len(self.samples) * self.factor
+        def __getitem__(self, idx):
+            s = self.samples[idx // self.factor]
+            xyz = trim_idle(s["samples"])
+            xyz = augment(xyz, rng=self.rng)
+            feat = compute_features(xyz)
+            return torch.from_numpy(feat), self.w2i[s["word"].lower()]
+
+    dataset = AugDS(all_samples, word_to_idx, factor=20)
+    val_size = max(1, int(len(dataset) * 0.1))
+    train_size = len(dataset) - val_size
+    train_ds, val_ds = torch.utils.data.random_split(
+        dataset, [train_size, val_size],
+        generator=torch.Generator().manual_seed(42))
+
+    train_loader = DataLoader(train_ds, batch_size=16, shuffle=True,
+                              collate_fn=collate_word)
+    val_loader = DataLoader(val_ds, batch_size=16, shuffle=False,
+                            collate_fn=collate_word)
+
+    # Fine-tune with lower LR
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-4)
+    criterion = nn.CrossEntropyLoss()
+    epochs = 20
+
+    best_val_acc = 0.0
+    for epoch in range(1, epochs + 1):
+        model.train()
+        for features, labels, lengths in train_loader:
+            features, labels, lengths = features.to(device), labels.to(device), lengths.to(device)
+            logits = model(features, lengths)
+            loss = criterion(logits, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        correct = total = 0
+        with torch.no_grad():
+            for features, labels, lengths in val_loader:
+                features, labels, lengths = features.to(device), labels.to(device), lengths.to(device)
+                logits = model(features, lengths)
+                correct += (logits.argmax(1) == labels).sum().item()
+                total += labels.size(0)
+        val_acc = correct / total if total else 0
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+        if epoch % 5 == 0:
+            print(f"[finetune] epoch {epoch}/{epochs} val_acc={val_acc:.3f}")
+
+    # Save
+    save_path = os.path.join(models_dir, "word_classifier_best.pt")
+    torch.save({
+        "model_state_dict": model.state_dict(),
+        "word_to_idx": word_to_idx,
+        "idx_to_word": idx_to_word,
+        "num_words": num_words,
+        "val_acc": best_val_acc,
+    }, save_path)
+
+    print(f"[finetune] done! val_acc={best_val_acc:.3f}, saved to {save_path}")
+
+    return {
+        "model": model,
+        "idx_to_word": idx_to_word,
+        "num_words": num_words,
+        "val_acc": best_val_acc,
+        "total_samples": len(all_samples),
+        "word_counts": word_counts,
+    }
+
+
+# ---------------------------------------------------------------------------
 # LLM re-ranking (Anthropic API)
 # ---------------------------------------------------------------------------
 
