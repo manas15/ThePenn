@@ -5,9 +5,8 @@ Lightweight server for the ThePenn notes UI + Ara integration.
 Supports both mock data and live pen input via pennference.py.
 
 Usage:
-    export ARA_API_KEY=...
-    export ARA_RUNTIME_KEY=...
     python3 notes_server.py
+    # Reads ARA_API_KEY and ARA_RUNTIME_KEY from .env file automatically
 """
 
 import asyncio
@@ -17,6 +16,15 @@ import sys
 from pathlib import Path
 
 from aiohttp import web
+
+# Load .env file if it exists
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip())
 
 STATIC_DIR = Path(__file__).resolve().parent / "training" / "static"
 ARA_APP_PATH = str(Path(__file__).resolve().parent / "ara_app.py")

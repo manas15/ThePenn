@@ -11,6 +11,9 @@ venv/
 # Audio recordings
 *.wav
 
+# Secrets
+.env
+
 # Platform
 .DS_Store
 Thumbs.db
