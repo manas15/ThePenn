@@ -1,5 +1,63 @@
 # ThePenn Integration Guide
 
+## UI Overview (http://localhost:8767)
+
+The notes interface has these sections:
+
+```
+┌─────────────────────────────────────────────┐
+│                  ThePenn                     │
+│          Live handwriting recognition       │
+│                                             │
+│  [Start Mock Stream]  [Start Live Pen]      │  ← Input source toggle
+│          ● Receiving words from pen...      │
+│                                             │
+│  ┌─────────────────────────────────────┐    │
+│  │ mitosis is the process of cell      │    │  ← Live word stream
+│  │ division where one cell divides     │    │    (words appear one by one
+│  │ into two identical daughter cells   │    │     as the pen writes them)
+│  │ the stages are prophase metaphase   │    │
+│  └─────────────────────────────────────┘    │
+│                                   70 words  │
+│                                             │
+│  [subject: ___] [Save to Ara] [Flashcards]  │  ← Ara actions
+│                 [Summary] [Quiz Me] [Clear]  │
+│                                             │
+│  ThePenn Study Assistant              ×     │
+│  ┌─────────────────────────────────────┐    │  ← Ara agent response
+│  │ I've created your new notes for     │    │    (appears after clicking
+│  │ "biology":                          │    │     any Ara action button)
+│  │ "Mitosis is the process of cell..." │    │
+│  │ Let me know if you want flashcards! │    │
+│  └─────────────────────────────────────┘    │
+└─────────────────────────────────────────────┘
+```
+
+### Two input modes
+
+| Button | What it does |
+|---|---|
+| **Start Mock Stream** | Plays fake biology words at ~3/sec for testing without hardware |
+| **Start Live Pen** | Launches `pennference.py`, connects to Arduino, streams real recognized words |
+
+Both modes feed words into the same notes display. You can switch between them.
+Only one can be active at a time.
+
+### Ara action buttons
+
+| Button | What it does |
+|---|---|
+| **Save to Ara** | Sends all captured words to the Ara agent, which stores them by subject + date |
+| **Flashcards** | Generates Q/A flashcards from the saved notes |
+| **Summary** | Creates a bullet-point summary of key concepts |
+| **Quiz Me** | Agent asks you questions about your notes |
+| **Clear** | Clears the word display (does not delete saved notes from Ara) |
+
+The **subject field** (left of Save to Ara) tags your notes — e.g. "biology", "history".
+Ara stores notes per subject so you can request flashcards/summaries for specific subjects later.
+
+---
+
 ## How the Live Pen → Notes UI → Ara pipeline works
 
 ```
