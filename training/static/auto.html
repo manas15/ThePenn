@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost Writer — Auto Collector</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 16px; }
+
+        header { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot.connected { background: #3fb950; }
+        .dot.disconnected { background: #f85149; }
+        .spacer { flex: 1; }
+
+        #chart-wrap { height: 120px; margin: 8px 0; }
+        #chart-wrap canvas { width: 100%; height: 100%; }
+
+        #prob-bar-wrap { height: 28px; background: #161b22; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; position: relative; }
+        #prob-bar { height: 100%; background: #238636; transition: width 0.05s; width: 0%; }
+        #prob-label { position: absolute; top: 4px; left: 8px; font-size: 12px; color: #8b949e; }
+
+        #controls { display: flex; gap: 8px; margin: 12px 0; align-items: center; }
+        button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .btn-start { background: #238636; color: #fff; }
+        .btn-start:disabled { opacity: 0.4; cursor: default; }
+        .btn-stop { background: #da3633; color: #fff; }
+        .btn-save { background: #1f6feb; color: #fff; }
+        .btn-save:disabled { opacity: 0.5; cursor: default; }
+
+        #prompt { font-size: 48px; font-weight: 700; text-align: center; padding: 24px 0; min-height: 100px;
+                  display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        #prompt .sub { font-size: 14px; color: #8b949e; font-weight: 400; margin-top: 4px; }
+        #prompt.writing { color: #3fb950; }
+        #prompt.next-flash { animation: flash 0.4s ease; }
+        @keyframes flash {
+            0% { color: #58a6ff; transform: scale(1.1); }
+            100% { color: #c9d1d9; transform: scale(1); }
+        }
+
+        #speech-warn { font-size: 12px; color: #d29922; margin-left: 8px; }
+
+        #status-msg { font-size: 13px; color: #8b949e; margin: 4px 0; }
+
+        /* Captured words panel */
+        #captured-section { margin-top: 16px; }
+        #captured-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
+        .captured-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+        .captured-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .captured-num { font-size: 12px; color: #8b949e; min-width: 24px; }
+        .captured-word { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 8px;
+                         border-radius: 4px; font-size: 14px; width: 140px; }
+        .captured-word.stt { border-color: #3fb950; }
+        .captured-word.no-stt { border-color: #f85149; }
+        .captured-info { font-size: 12px; color: #8b949e; }
+        .captured-audio { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #8b949e; }
+        .captured-audio .audio-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .captured-audio .audio-dot.has-audio { background: #3fb950; }
+        .captured-audio .audio-dot.no-audio { background: #f85149; }
+        .btn-play { background: #21262d; color: #c9d1d9; padding: 4px 8px; font-size: 12px; border: 1px solid #30363d; }
+        .btn-play.playing { background: #da3633; border-color: #da3633; }
+        .btn-discard { background: #21262d; color: #f85149; padding: 4px 8px; font-size: 12px; border: 1px solid #30363d; }
+        .btn-word-save { background: #238636; color: #fff; padding: 4px 10px; font-size: 12px; border: none; }
+        .btn-word-save:disabled { opacity: 0.4; cursor: default; }
+        .captured-card.saved { opacity: 0.6; border-color: #238636; }
+        .captured-card.saved .captured-word { color: #3fb950; }
+        .spacer-sm { flex: 1; }
+        .captured-canvas { width: 100%; height: 70px; }
+
+        #log { margin-top: 12px; font-size: 12px; color: #8b949e; max-height: 150px; overflow-y: auto;
+               background: #161b22; border-radius: 6px; padding: 8px; }
+        #log div { padding: 2px 0; border-bottom: 1px solid #21262d; }
+    </style>
+</head>
+<body>
+    <header>
+        <span id="dot" class="dot disconnected"></span>
+        <span id="conn-text">Connecting...</span>
+        <span class="spacer"></span>
+        <span id="rate">-- Hz</span>
+    </header>
+
+    <div id="chart-wrap"><canvas id="chart"></canvas></div>
+
+    <div id="prob-bar-wrap">
+        <div id="prob-bar"></div>
+        <span id="prob-label">P(writing): --</span>
+    </div>
+
+    <div id="controls">
+        <button id="btn-start" class="btn-start">Start Session</button>
+        <button id="btn-stop" class="btn-stop" style="display:none">Stop</button>
+        <button id="btn-save" class="btn-save" style="display:none">Save Session</button>
+        <span id="speech-warn"></span>
+    </div>
+
+    <div id="prompt">
+        Click Start, then write words
+        <span class="sub">say each word aloud while writing -- speech-to-text labels them</span>
+    </div>
+
+    <div id="status-msg"></div>
+
+    <section id="captured-section" style="display:none">
+        <h3>Captured Words (<span id="captured-count">0</span>)</h3>
+        <div id="captured-list"></div>
+    </section>
+
+    <div id="log"></div>
+
+    <script src="/static/chart.js"></script>
+    <script>
+        const $dot = document.getElementById("dot");
+        const $conn = document.getElementById("conn-text");
+        const $rate = document.getElementById("rate");
+        const $probBar = document.getElementById("prob-bar");
+        const $probLabel = document.getElementById("prob-label");
+        const $btnStart = document.getElementById("btn-start");
+        const $btnStop = document.getElementById("btn-stop");
+        const $btnSave = document.getElementById("btn-save");
+        const $prompt = document.getElementById("prompt");
+        const $status = document.getElementById("status-msg");
+        const $log = document.getElementById("log");
+        const $speechWarn = document.getElementById("speech-warn");
+        const $capturedSection = document.getElementById("captured-section");
+        const $capturedCount = document.getElementById("captured-count");
+        const $capturedList = document.getElementById("captured-list");
+
+        let ws = null;
+        let connected = false;
+        let running = false;
+        let completedWords = [];
+        let prevRaw = null;
+        let currentPlayingAudio = null;
+
+        const chart = new AccelChart(document.getElementById("chart"));
+        (function animLoop() { chart.draw(); requestAnimationFrame(animLoop); })();
+
+        // ─── Audio Recording (WAV via Web Audio API) ────────────
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        let micStream = null;
+        let micSource = null;
+        let micProcessor = null;
+        let micChunks = [];
+        let micReady = false;
+        let micRecording = false;
+
+        async function initMic() {
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micSource = audioCtx.createMediaStreamSource(micStream);
+                micProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+                micProcessor.onaudioprocess = (e) => {
+                    if (micRecording) {
+                        micChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                    }
+                };
+                micSource.connect(micProcessor);
+                micProcessor.connect(audioCtx.destination);
+                micReady = true;
+                log("microphone ready");
+            } catch (err) {
+                console.warn("Audio recording unavailable:", err);
+                micReady = false;
+            }
+        }
+
+        function startMicRecording() {
+            micChunks = [];
+            micRecording = true;
+            if (audioCtx.state === "suspended") audioCtx.resume();
+        }
+
+        function stopMicRecording() {
+            micRecording = false;
+            if (!micReady || micChunks.length === 0) return null;
+            const totalLen = micChunks.reduce((sum, c) => sum + c.length, 0);
+            const merged = new Float32Array(totalLen);
+            let offset = 0;
+            for (const chunk of micChunks) { merged.set(chunk, offset); offset += chunk.length; }
+            micChunks = [];
+            return encodeWAV(merged, audioCtx.sampleRate);
+        }
+
+        function encodeWAV(samples, sampleRate) {
+            const bps = 16, nc = 1;
+            const dataSize = samples.length * (bps / 8);
+            const buf = new ArrayBuffer(44 + dataSize);
+            const v = new DataView(buf);
+            function wstr(o, s) { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+            wstr(0, "RIFF"); v.setUint32(4, 36 + dataSize, true); wstr(8, "WAVE");
+            wstr(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+            v.setUint16(22, nc, true); v.setUint32(24, sampleRate, true);
+            v.setUint32(28, sampleRate * nc * (bps / 8), true);
+            v.setUint16(32, nc * (bps / 8), true); v.setUint16(34, bps, true);
+            wstr(36, "data"); v.setUint32(40, dataSize, true);
+            let p = 44;
+            for (let i = 0; i < samples.length; i++) {
+                let s = Math.max(-1, Math.min(1, samples[i]));
+                v.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                p += 2;
+            }
+            return new Blob([buf], { type: "audio/wav" });
+        }
+
+        async function uploadAudio(sampleId, wavBlob) {
+            if (!wavBlob) return;
+            try {
+                await fetch(`/api/samples/${sampleId}/audio`, {
+                    method: "POST",
+                    headers: { "Content-Type": "audio/wav" },
+                    body: wavBlob,
+                });
+            } catch (err) { console.warn("Audio upload failed:", err); }
+        }
+
+        initMic();
+
+        // ─── Server-side Whisper transcription (via WebSocket) ───
+        const pendingTranscriptions = {};  // sample_id -> resolve function
+
+        function transcribeOnServer(sampleId) {
+            return new Promise((resolve) => {
+                pendingTranscriptions[sampleId] = resolve;
+                ws.send(JSON.stringify({ type: "transcribe", sample_id: sampleId }));
+            });
+        }
+
+        // ─── Beep + Say Next ───────────────────────────────────
+        function beep(freq = 880, duration = 0.12) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            gain.gain.value = 0.3;
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function sayNext() {
+            const u = new SpeechSynthesisUtterance("next");
+            u.rate = 1.8;
+            u.pitch = 1.2;
+            u.volume = 0.8;
+            speechSynthesis.speak(u);
+        }
+
+        // ─── Helpers ───────────────────────────────────────────
+        function log(msg) {
+            const d = document.createElement("div");
+            d.textContent = `${new Date().toLocaleTimeString()} -- ${msg}`;
+            $log.prepend(d);
+            if ($log.children.length > 50) $log.lastChild.remove();
+        }
+
+        function samplesToDeltas(samples, timestamps) {
+            const deltas = [];
+            for (let i = 1; i < samples.length; i++) {
+                deltas.push({
+                    x: samples[i][0] - samples[i - 1][0],
+                    y: samples[i][1] - samples[i - 1][1],
+                    z: samples[i][2] - samples[i - 1][2],
+                    t: timestamps[i],
+                });
+            }
+            return deltas;
+        }
+
+        function playAudioBlob(blob, btn) {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio = null;
+                document.querySelectorAll(".btn-play.playing").forEach(b => {
+                    b.textContent = "\u25B6"; b.classList.remove("playing");
+                });
+            }
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            currentPlayingAudio = audio;
+            btn.textContent = "\u25A0";
+            btn.classList.add("playing");
+            audio.onended = () => {
+                btn.textContent = "\u25B6"; btn.classList.remove("playing");
+                URL.revokeObjectURL(url); currentPlayingAudio = null;
+            };
+            audio.play();
+        }
+
+        // ─── Captured Words Panel ──────────────────────────────
+        function renderCaptured() {
+            $capturedCount.textContent = completedWords.length;
+            $capturedSection.style.display = completedWords.length > 0 ? "" : "none";
+            $capturedList.innerHTML = "";
+
+            completedWords.forEach((cw, idx) => {
+                const card = document.createElement("div");
+                card.className = "captured-card" + (cw.saved ? " saved" : "");
+
+                const header = document.createElement("div");
+                header.className = "captured-header";
+
+                const num = document.createElement("span");
+                num.className = "captured-num";
+                num.textContent = `#${idx + 1}`;
+                header.appendChild(num);
+
+                const wordInput = document.createElement("input");
+                wordInput.type = "text";
+                wordInput.className = "captured-word " + (cw.transcribing ? "no-stt" : cw.word ? "stt" : "no-stt");
+                wordInput.value = cw.transcribing ? "" : cw.word;
+                wordInput.placeholder = cw.transcribing ? "transcribing..." : "type word...";
+                wordInput.disabled = !!cw.transcribing;
+                wordInput.autocomplete = "off";
+                wordInput.spellcheck = false;
+                wordInput.addEventListener("input", () => {
+                    cw.word = wordInput.value.trim().toLowerCase();
+                    wordInput.className = "captured-word " + (cw.word ? "stt" : "no-stt");
+                });
+                header.appendChild(wordInput);
+
+                const info = document.createElement("span");
+                info.className = "captured-info";
+                info.textContent = `${cw.duration_s.toFixed(2)}s \u00b7 ${cw.samples.length} pts`;
+                header.appendChild(info);
+
+                const audioBadge = document.createElement("span");
+                audioBadge.className = "captured-audio";
+                const dot = document.createElement("span");
+                dot.className = "audio-dot " + (cw.wavBlob ? "has-audio" : "no-audio");
+                audioBadge.appendChild(dot);
+                audioBadge.appendChild(document.createTextNode(cw.wavBlob ? "audio" : "no audio"));
+                header.appendChild(audioBadge);
+
+                if (cw.wavBlob) {
+                    const playBtn = document.createElement("button");
+                    playBtn.className = "btn-play";
+                    playBtn.textContent = "\u25B6";
+                    playBtn.title = "Play audio";
+                    playBtn.addEventListener("click", () => playAudioBlob(cw.wavBlob, playBtn));
+                    header.appendChild(playBtn);
+                }
+
+                header.appendChild(Object.assign(document.createElement("span"), { className: "spacer-sm" }));
+
+                // Save individual word
+                if (!cw.saved) {
+                    const saveBtn = document.createElement("button");
+                    saveBtn.className = "btn-word-save";
+                    saveBtn.textContent = "Save";
+                    saveBtn.disabled = !cw.word || cw.transcribing;
+                    saveBtn.addEventListener("click", async () => {
+                        if (!cw.word) return;
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = "Saving...";
+                        // Upload audio if not already uploaded
+                        if (cw.wavBlob && cw.sample_id && !cw.audioUploaded) {
+                            await uploadAudio(cw.sample_id, cw.wavBlob);
+                            cw.audioUploaded = true;
+                        }
+                        ws.send(JSON.stringify({
+                            type: "save_word",
+                            sample_id: cw.sample_id,
+                            word: cw.word,
+                            samples: cw.samples,
+                            timestamps: cw.timestamps,
+                        }));
+                        cw.saved = true;
+                        log(`saved: "${cw.word}"`);
+                        renderCaptured();
+                    });
+                    header.appendChild(saveBtn);
+                } else {
+                    const savedLabel = document.createElement("span");
+                    savedLabel.className = "captured-info";
+                    savedLabel.textContent = "saved";
+                    savedLabel.style.color = "#3fb950";
+                    header.appendChild(savedLabel);
+                }
+
+                const discardBtn = document.createElement("button");
+                discardBtn.className = "btn-discard";
+                discardBtn.textContent = "\u2715";
+                discardBtn.title = "Discard";
+                if (!cw.saved) {
+                    discardBtn.addEventListener("click", () => {
+                        completedWords.splice(idx, 1);
+                        renderCaptured();
+                    });
+                } else {
+                    discardBtn.disabled = true;
+                }
+                header.appendChild(discardBtn);
+
+                card.appendChild(header);
+
+                const canvas = document.createElement("canvas");
+                canvas.className = "captured-canvas";
+                card.appendChild(canvas);
+
+                $capturedList.appendChild(card);
+
+                requestAnimationFrame(() => {
+                    const miniChart = new AccelChart(canvas, {
+                        windowSec: Math.max(cw.duration_s * 1.1, 0.5),
+                        autoScale: true,
+                    });
+                    miniChart.setData(samplesToDeltas(cw.samples, cw.timestamps));
+                    miniChart.draw();
+                });
+            });
+        }
+
+        // ─── WebSocket ─────────────────────────────────────────
+        function connectWS() {
+            const proto = location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+            ws.onmessage = (evt) => {
+                const data = JSON.parse(evt.data);
+
+                switch (data.type) {
+                    case "status":
+                        connected = data.connected;
+                        $dot.className = "dot " + (connected ? "connected" : "disconnected");
+                        $conn.textContent = connected ? `Connected: ${data.port}` : "Disconnected";
+                        $rate.textContent = connected ? `${data.sample_rate_hz} Hz` : "-- Hz";
+                        $btnStart.disabled = !connected;
+                        break;
+
+                    case "accel":
+                        if (prevRaw) {
+                            chart.push({
+                                x: data.x - prevRaw.x,
+                                y: data.y - prevRaw.y,
+                                z: data.z - prevRaw.z,
+                                t: data.t,
+                            });
+                        }
+                        prevRaw = { x: data.x, y: data.y, z: data.z };
+                        break;
+
+                    case "prob":
+                        const pct = Math.round(data.p * 100);
+                        $probBar.style.width = pct + "%";
+                        $probBar.style.background = data.p > 0.5 ? "#238636" : "#da3633";
+                        $probLabel.textContent = `P(writing): ${pct}%`;
+                        break;
+
+                    case "word_start":
+                        startMicRecording();
+                        if (running) {
+                            $prompt.innerHTML = `<span>...</span><span class="sub">writing -- say the word aloud</span>`;
+                            $prompt.className = "writing";
+                            log("writing detected -- recording audio");
+                        }
+                        break;
+
+                    case "word_end": {
+                        const wavBlob = stopMicRecording();
+                        beep();
+
+                        if (!running) break;
+
+                        completedWords.push({
+                            word: "",
+                            sample_id: data.sample_id,
+                            samples: data.samples,
+                            timestamps: data.timestamps,
+                            duration_s: data.duration_s,
+                            t_start: data.t - data.duration_s,
+                            t_end: data.t,
+                            wavBlob: wavBlob,
+                            transcribing: false,
+                        });
+
+                        log(`word #${completedWords.length} captured (${data.duration_s}s, ${data.num_samples} pts)`);
+                        $prompt.innerHTML = `<span>#${completedWords.length}</span><span class="sub">word captured -- keep writing</span>`;
+                        $prompt.className = "next-flash";
+                        renderCaptured();
+                        break;
+                    }
+
+                    case "transcription": {
+                        const resolve = pendingTranscriptions[data.sample_id];
+                        if (resolve) {
+                            delete pendingTranscriptions[data.sample_id];
+                            resolve(data.text || "");
+                        }
+                        break;
+                    }
+
+                    case "word_saved":
+                        log(`saved "${data.word}" -> ${data.file}`);
+                        break;
+
+                    case "session_saved":
+                        log(`Session saved: ${data.csv} (${data.words} words)`);
+                        $status.textContent = `Saved: ${data.csv}`;
+                        $btnSave.style.display = "none";
+                        $btnStart.style.display = "";
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                connected = false;
+                $dot.className = "dot disconnected";
+                $conn.textContent = "Reconnecting...";
+                setTimeout(connectWS, 2000);
+            };
+            ws.onerror = () => ws.close();
+        }
+        connectWS();
+
+        // ─── Controls ──────────────────────────────────────────
+        $btnStart.addEventListener("click", () => {
+            if (!connected) return;
+            completedWords = [];
+            running = true;
+
+            $prompt.innerHTML = `<span>Ready</span><span class="sub">start writing -- say each word aloud</span>`;
+            $prompt.className = "";
+            $btnStart.style.display = "none";
+            $btnStop.style.display = "";
+            $btnSave.style.display = "none";
+            $status.textContent = "";
+            log("session started -- write freely, say words aloud");
+
+            renderCaptured();
+            ws.send(JSON.stringify({ type: "start_session" }));
+        });
+
+        $btnStop.addEventListener("click", async () => {
+            running = false;
+            stopMicRecording();
+
+            $btnStop.style.display = "none";
+            $btnStop.disabled = true;
+            ws.send(JSON.stringify({ type: "stop_session" }));
+
+            const withAudio = completedWords.filter(cw => cw.wavBlob && cw.sample_id);
+            if (withAudio.length > 0) {
+                // Upload all audio first
+                $prompt.innerHTML = `<span>Uploading...</span><span class="sub">${withAudio.length} audio files</span>`;
+                $status.textContent = "Uploading audio files...";
+                for (const cw of withAudio) {
+                    await uploadAudio(cw.sample_id, cw.wavBlob);
+                }
+                log(`uploaded ${withAudio.length} audio files`);
+
+                // Now transcribe each one
+                const toTranscribe = completedWords.filter(cw => !cw.word && cw.wavBlob && cw.sample_id);
+                for (let i = 0; i < toTranscribe.length; i++) {
+                    const cw = toTranscribe[i];
+                    cw.transcribing = true;
+                    $prompt.innerHTML = `<span>Transcribing...</span><span class="sub">${i + 1} of ${toTranscribe.length}</span>`;
+                    $status.textContent = `Transcribing word ${i + 1} of ${toTranscribe.length}...`;
+                    renderCaptured();
+
+                    try {
+                        const text = await transcribeOnServer(cw.sample_id);
+                        cw.word = text;
+                        log(`#${completedWords.indexOf(cw) + 1} transcribed: "${text || "(empty)"}"`);
+                    } catch (err) {
+                        log(`#${completedWords.indexOf(cw) + 1} transcription failed: ${err}`);
+                    }
+                    cw.transcribing = false;
+                    renderCaptured();
+                }
+            }
+
+            $prompt.innerHTML = `<span>Stopped</span><span class="sub">${completedWords.length} words captured</span>`;
+            $prompt.className = "";
+            $btnStart.style.display = "";
+            $btnStop.disabled = false;
+            $btnSave.style.display = completedWords.length > 0 ? "" : "none";
+            $btnSave.disabled = false;
+            $status.textContent = `Session stopped. Review labels and click Save.`;
+            renderCaptured();
+        });
+
+        $btnSave.addEventListener("click", async () => {
+            // Check for still-transcribing or unlabeled words
+            const pending = completedWords.filter(cw => cw.transcribing);
+            if (pending.length > 0) {
+                $status.textContent = `${pending.length} word(s) still transcribing -- wait a moment.`;
+                return;
+            }
+            const unlabeled = completedWords.filter(cw => !cw.word);
+            if (unlabeled.length > 0) {
+                $status.textContent = `${unlabeled.length} word(s) have no label -- type them in before saving.`;
+                document.querySelectorAll(".captured-word.no-stt").forEach(el => {
+                    el.style.borderColor = "#f85149";
+                    el.focus();
+                });
+                return;
+            }
+
+            $btnSave.disabled = true;
+            // Audio already uploaded during capture -- just save the session
+
+            const wordEvents = completedWords.map(cw => ({
+                word: cw.word,
+                sample_id: cw.sample_id,
+                samples: cw.samples,
+                timestamps: cw.timestamps,
+                t_start: cw.t_start,
+                t_end: cw.t_end,
+            }));
+            ws.send(JSON.stringify({ type: "save_session_csv", words: wordEvents }));
+            $status.textContent = "Saving session...";
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motion Samples — Δx Δy Δz Over Time</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 28px; }
+  .chart-section { margin-bottom: 36px; }
+  .chart-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .chart-title .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chart-title .meta { font-size: 12px; color: #666; font-weight: 400; }
+  .chart-wrap { background: #181a24; border-radius: 10px; padding: 16px; border: 1px solid #252836; }
+  canvas { width: 100% !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Δx, Δy, Δz Over Time</h1>
+  <div class="subtitle">Frame-to-frame displacement for each word</div>
+  <div id="charts"></div>
+</div>
+<script>
+const DATA = [
+  {"word":"manus","color":"#6366f1","samples":[[0.138,0.84,0.55],[0.1,0.854,0.549],[0.122,0.849,0.55],[0.117,0.839,0.559],[0.121,0.858,0.553],[0.113,0.845,0.55],[0.089,0.872,0.505],[0.103,0.853,0.55],[0.523,0.846,0.39],[0.063,0.841,0.608],[0.181,0.905,0.513],[-0.045,0.73,0.551],[0.09,0.844,0.459],[0.218,0.805,0.505],[0.082,0.875,0.514],[0.169,0.89,0.66],[0.217,0.851,0.505],[0.063,0.86,0.497],[0.071,0.882,0.586],[0.06,0.979,0.436],[0.191,0.853,0.396],[0.182,0.926,0.461],[0.145,0.898,0.476],[0.308,0.748,0.384],[0.186,0.871,0.34],[0.283,0.998,0.456],[0.112,0.887,0.538],[-0.001,0.85,0.71],[0.307,0.979,0.059],[0.151,0.926,0.46],[0.12,0.907,0.378],[0.213,0.896,0.449],[0.133,0.907,0.455],[0.12,0.915,0.456],[0.227,0.929,0.442],[-0.163,0.896,0.466],[0.126,0.886,0.485],[0.076,0.85,0.415],[0.177,0.917,0.426],[0.356,0.922,0.37],[0.168,0.913,0.419],[0.09,0.872,0.619],[0.209,0.915,0.421],[0.273,0.862,0.261],[0.18,0.907,0.429],[0.19,0.923,0.405],[0.187,0.929,0.307],[0.22,0.924,0.233],[0.234,0.905,0.401],[0.164,0.928,0.391],[0.116,0.926,0.26],[0.206,0.964,0.36],[0.175,0.935,0.338],[0.173,0.983,0.38],[0.245,0.933,0.352],[0.231,0.945,0.351],[0.035,0.989,0.405],[0.308,0.889,0.311],[0.124,0.964,0.397],[0.409,0.804,0.439]],"timestamps":[0.0386,0.0919,0.1529,0.2025,0.2557,0.309,0.3622,0.4156,0.4687,0.522,0.5752,0.6284,0.6817,0.7351,0.7882,0.8419,0.8988,0.952,1.0053,1.0585,1.1117,1.165,1.2183,1.2716,1.3248,1.378,1.4313,1.4886,1.5377,1.591,1.6443,1.7015,1.7548,1.809,1.8612,1.9146,1.9677,2.0227,2.0742,2.1276,2.1807,2.234,2.2873,2.3407,2.3937,2.451,2.5043,2.5577,2.6108,2.664,2.7173,2.7706,2.824,2.877,2.9302,2.9836,3.0369,3.09,3.1433,3.1966]},
+  {"word":"the","color":"#f59e0b","samples":[[0.229,0.745,0.768],[-0.03,0.536,0.575],[0.228,0.721,0.589],[0.065,0.99,0.541],[0.08,0.835,0.568],[0.238,0.813,0.517],[0.189,0.879,0.525],[0.217,0.79,0.563],[0.137,0.847,0.56],[0.226,0.777,0.584],[0.127,0.873,0.514],[0.178,0.841,0.543],[0.126,0.849,0.515],[0.121,0.882,0.48],[0.118,0.878,0.523],[0.229,0.824,0.561],[0.137,0.894,0.499],[0.16,0.849,0.523],[0.177,0.82,0.554],[0.034,0.959,0.431],[-0.019,0.905,0.607],[0.364,0.633,0.37],[0.011,0.806,0.65],[0.073,0.885,0.472],[0.095,0.834,0.534],[0.059,0.932,0.553],[0.164,0.937,0.414],[0.111,0.87,0.53],[-0.125,0.765,0.631],[-0.009,0.972,0.442],[0.135,0.939,0.426],[0.135,0.776,0.41],[0.249,0.925,0.406],[0.115,0.9,0.378],[0.292,1.042,0.381],[0.18,0.914,0.351],[0.264,1.085,0.124],[0.244,0.736,0.583],[0.087,0.835,0.494],[0.196,0.903,0.55],[-0.104,1.999,-0.479],[0.277,0.879,0.455],[0.106,0.912,0.421],[0.01,1.13,0.415]],"timestamps":[0.0524,0.1057,0.1589,0.2122,0.2655,0.3186,0.3719,0.4251,0.4784,0.5317,0.5849,0.6422,0.6954,0.7487,0.8021,0.8551,0.9085,0.9616,1.015,1.0682,1.1214,1.1747,1.2279,1.2811,1.3344,1.3917,1.4449,1.4983,1.5514,1.6047,1.6579,1.7112,1.7644,1.8177,1.8709,1.9242,1.9774,2.0307,2.0839,2.1372,2.1945,2.2477,2.301,2.3542]},
+  {"word":"cat","color":"#10b981","samples":[[0.09,0.829,0.601],[0.116,0.885,0.624],[0.13,0.91,0.512],[0.058,0.876,0.521],[0.122,0.926,0.541],[0.07,0.882,0.524],[0.12,0.828,0.508],[0.039,0.916,0.479],[0.246,0.924,0.43],[0.111,0.895,0.469],[-0.11,0.998,0.751],[0.047,0.925,0.398],[0.179,0.957,0.469],[0.123,0.875,0.618],[0.114,0.899,0.449],[0.169,0.902,0.448],[0.05,0.918,0.428],[0.117,0.943,0.423],[0.081,0.884,0.451],[0.167,0.95,0.298],[0.125,0.916,0.46],[0.163,0.979,0.365],[0.124,0.836,0.631],[0.071,0.907,0.399],[-0.364,0.812,0.774],[0.184,1.018,0.317],[0.017,0.898,0.539],[0.325,0.976,0.43],[-0.078,0.956,0.438],[0.175,0.912,0.343],[0.088,0.942,0.369],[0.06,0.888,0.461],[0.236,0.827,0.485],[0.217,0.854,0.464],[0.233,0.93,0.418],[0.229,0.937,0.446],[0.238,0.859,0.469],[0.177,0.88,0.462],[0.204,0.878,0.467]],"timestamps":[0.0237,0.0769,0.1302,0.1834,0.2366,0.2899,0.3432,0.3964,0.4497,0.503,0.5562,0.6094,0.6627,0.7159,0.7732,0.8265,0.8796,0.933,0.9861,1.0394,1.0927,1.1459,1.1992,1.2524,1.3057,1.359,1.4122,1.4654,1.5227,1.576,1.6292,1.6824,1.7357,1.7889,1.8422,1.8954,1.9487,2.0019,2.0552]}
+];
+
+const AXIS_COLORS = { dx: '#ef4444', dy: '#22c55e', dz: '#3b82f6' };
+
+const chartsEl = document.getElementById('charts');
+
+DATA.forEach(d => {
+  const deltas = { dx: [], dy: [], dz: [] };
+  const times = [];
+
+  for (let i = 1; i < d.samples.length; i++) {
+    const dt = d.timestamps[i] - d.timestamps[i-1];
+    const midT = (d.timestamps[i] + d.timestamps[i-1]) / 2;
+    times.push(midT);
+    deltas.dx.push((d.samples[i][0] - d.samples[i-1][0]) / dt);
+    deltas.dy.push((d.samples[i][1] - d.samples[i-1][1]) / dt);
+    deltas.dz.push((d.samples[i][2] - d.samples[i-1][2]) / dt);
+  }
+
+  const section = document.createElement('div');
+  section.className = 'chart-section';
+  section.innerHTML = `
+    <div class="chart-title">
+      <span class="dot" style="background:${d.color}"></span>
+      "${d.word}"
+      <span class="meta">${d.samples.length} samples · ${d.timestamps[d.timestamps.length-1].toFixed(2)}s</span>
+    </div>
+    <div class="chart-wrap"><canvas></canvas></div>
+  `;
+  chartsEl.appendChild(section);
+
+  const ctx = section.querySelector('canvas').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: times.map(t => t.toFixed(2)),
+      datasets: [
+        { label: 'dx/dt', data: deltas.dx, borderColor: AXIS_COLORS.dx, backgroundColor: AXIS_COLORS.dx + '18', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true },
+        { label: 'dy/dt', data: deltas.dy, borderColor: AXIS_COLORS.dy, backgroundColor: AXIS_COLORS.dy + '18', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true },
+        { label: 'dz/dt', data: deltas.dz, borderColor: AXIS_COLORS.dz, backgroundColor: AXIS_COLORS.dz + '18', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.8,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#aaa', usePointStyle: true, pointStyle: 'line', padding: 16, font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#1e2030',
+          borderColor: '#3a3d50',
+          borderWidth: 1,
+          titleColor: '#eee',
+          bodyColor: '#ccc',
+          padding: 10,
+          callbacks: {
+            title: items => `t = ${items[0].label}s`,
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(3)}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Time (s)', color: '#777', font: { size: 11 } },
+          ticks: { color: '#555', maxTicksLimit: 12, font: { size: 10 } },
+          grid: { color: '#1f2233' }
+        },
+        y: {
+          title: { display: true, text: 'Velocity (units/s)', color: '#777', font: { size: 11 } },
+          ticks: { color: '#555', font: { size: 10 } },
+          grid: { color: '#1f2233' }
+        }
+      }
+    }
+  });
+});
+</script>
+</body>
+</html>

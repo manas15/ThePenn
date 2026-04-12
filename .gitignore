@@ -6,16 +6,10 @@ __pycache__/
 venv/
 
 # ML artifacts
-*.pt
 *.onnx
 
 # Audio recordings
-data/audio/*.wav
-
-# Training data (tracked separately or too large)
-data/sessions/*.jsonl
-data/sessions/*.csv
-data/samples.jsonl
+*.wav
 
 # Platform
 .DS_Store
