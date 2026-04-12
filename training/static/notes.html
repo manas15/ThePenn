@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThePenn — Live Notes</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            background: #0d1117; color: #c9d1d9;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; padding: 32px 16px;
+        }
+
+        h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+        .subtitle { font-size: 13px; color: #8b949e; margin-bottom: 24px; }
+
+        /* Status dot */
+        .status-bar {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: #8b949e; margin-bottom: 20px;
+        }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; }
+        .dot.off { background: #484f58; }
+
+        /* Notes area */
+        #notes-area {
+            width: 100%; max-width: 640px;
+            background: #161b22; border: 1px solid #21262d; border-radius: 12px;
+            padding: 20px 24px; min-height: 200px;
+            font-family: "Georgia", serif; font-size: 18px; line-height: 1.8;
+            color: #e1e4e8; position: relative;
+        }
+        #notes-area .cursor {
+            display: inline-block; width: 2px; height: 1.1em;
+            background: #58a6ff; animation: blink 1s step-end infinite;
+            vertical-align: text-bottom; margin-left: 2px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        #notes-area .word { display: inline; }
+        #notes-area .word.new {
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { color: #58a6ff; } to { color: #e1e4e8; }
+        }
+
+        .word-count {
+            font-size: 12px; color: #484f58; margin-top: 8px;
+            text-align: right; max-width: 640px; width: 100%;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex; gap: 10px; margin-top: 20px;
+            align-items: center; flex-wrap: wrap; justify-content: center;
+        }
+        .subject-input {
+            background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+            padding: 10px 14px; border-radius: 8px; font-size: 15px; width: 180px;
+        }
+        .subject-input:focus { outline: none; border-color: #58a6ff; }
+        .subject-input::placeholder { color: #484f58; }
+
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: default; }
+        .btn-save { background: #238636; color: #fff; }
+        .btn-save:not(:disabled):hover { background: #2ea043; }
+        .btn-flashcards { background: #1f6feb; color: #fff; }
+        .btn-flashcards:not(:disabled):hover { background: #388bfd; }
+        .btn-summary { background: #8957e5; color: #fff; }
+        .btn-summary:not(:disabled):hover { background: #a371f7; }
+        .btn-quiz { background: #d29922; color: #fff; }
+        .btn-quiz:not(:disabled):hover { background: #e3b341; }
+        .btn-clear { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+        .btn-clear:hover { color: #c9d1d9; border-color: #484f58; }
+
+        /* Ara response */
+        #ara-panel {
+            display: none; width: 100%; max-width: 640px; margin-top: 20px;
+        }
+        #ara-panel .panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        #ara-panel .panel-title {
+            font-size: 14px; font-weight: 600; color: #58a6ff;
+        }
+        #ara-panel .panel-close {
+            background: none; border: none; color: #484f58; cursor: pointer;
+            font-size: 18px; padding: 0 4px;
+        }
+        #ara-panel .panel-close:hover { color: #c9d1d9; }
+        #ara-response {
+            background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+            padding: 16px 20px; font-size: 15px; line-height: 1.7;
+            white-space: pre-wrap; max-height: 500px; overflow-y: auto;
+        }
+        #ara-status {
+            font-size: 13px; color: #8b949e; padding: 12px 0; text-align: center;
+        }
+        .spinner { display: inline-block; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Mock controls */
+        .mock-bar {
+            display: flex; gap: 8px; margin-bottom: 16px; align-items: center;
+            font-size: 12px; color: #484f58; max-width: 640px; width: 100%;
+        }
+        .mock-bar .btn { font-size: 12px; padding: 4px 12px; }
+        .btn-mock { background: #30363d; color: #8b949e; }
+        .btn-mock:hover { color: #c9d1d9; }
+        .btn-mock.active { background: #238636; color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>ThePenn</h1>
+    <div class="subtitle">Live handwriting recognition</div>
+
+    <div class="mock-bar">
+        <span>Demo:</span>
+        <button id="btn-mock" class="btn btn-mock">Start Mock Stream</button>
+        <span id="mock-status"></span>
+    </div>
+
+    <div class="status-bar">
+        <span id="stream-dot" class="dot off"></span>
+        <span id="stream-status">Waiting for pen input...</span>
+    </div>
+
+    <div id="notes-area">
+        <span id="notes-text"></span><span class="cursor"></span>
+    </div>
+    <div class="word-count"><span id="wcount">0</span> words</div>
+
+    <div class="controls">
+        <input id="subject" class="subject-input" type="text" placeholder="Subject (e.g. biology)" value="">
+        <button id="btn-save" class="btn btn-save" disabled>Save to Ara</button>
+        <button id="btn-flashcards" class="btn btn-flashcards" disabled>Flashcards</button>
+        <button id="btn-summary" class="btn btn-summary" disabled>Summary</button>
+        <button id="btn-quiz" class="btn btn-quiz" disabled>Quiz Me</button>
+        <button id="btn-clear" class="btn btn-clear">Clear</button>
+    </div>
+
+    <div id="ara-panel">
+        <div class="panel-header">
+            <span class="panel-title">ThePenn Study Assistant</span>
+            <button class="panel-close" id="btn-close-panel">&times;</button>
+        </div>
+        <div id="ara-status"></div>
+        <div id="ara-response"></div>
+    </div>
+
+    <script>
+        const $notesText = document.getElementById("notes-text");
+        const $wcount = document.getElementById("wcount");
+        const $streamDot = document.getElementById("stream-dot");
+        const $streamStatus = document.getElementById("stream-status");
+        const $subject = document.getElementById("subject");
+        const $araPanel = document.getElementById("ara-panel");
+        const $araStatus = document.getElementById("ara-status");
+        const $araResponse = document.getElementById("ara-response");
+        const $btnSave = document.getElementById("btn-save");
+        const $btnFlash = document.getElementById("btn-flashcards");
+        const $btnSummary = document.getElementById("btn-summary");
+        const $btnQuiz = document.getElementById("btn-quiz");
+        const $btnMock = document.getElementById("btn-mock");
+        const $mockStatus = document.getElementById("mock-status");
+
+        let words = [];
+        let mockInterval = null;
+        let mockRunning = false;
+
+        // ── Mock word stream ───────────────────────────────
+        const MOCK_SENTENCES = [
+            "mitosis is the process of cell division",
+            "where one cell divides into two identical daughter cells",
+            "the stages are prophase metaphase anaphase and telophase",
+            "during prophase chromosomes condense and become visible",
+            "the nuclear envelope breaks down",
+            "during metaphase chromosomes align at the cell equator",
+            "spindle fibers attach to the centromeres",
+            "during anaphase sister chromatids are pulled apart",
+            "they move to opposite poles of the cell",
+            "during telophase nuclear envelopes reform",
+            "the cell then undergoes cytokinesis and splits into two",
+        ];
+        let mockWords = [];
+        let mockIdx = 0;
+
+        function prepareMockWords() {
+            mockWords = MOCK_SENTENCES.flatMap(s => s.split(" "));
+            mockIdx = 0;
+        }
+
+        function toggleMockStream() {
+            if (mockRunning) {
+                stopMockStream();
+            } else {
+                startMockStream();
+            }
+        }
+
+        function startMockStream() {
+            prepareMockWords();
+            mockRunning = true;
+            $btnMock.textContent = "Stop Mock";
+            $btnMock.classList.add("active");
+            $streamDot.classList.remove("off");
+            $streamStatus.textContent = "Receiving words from pen...";
+            $mockStatus.textContent = "";
+
+            // Push words at ~2-4 per second (simulating real writing speed)
+            mockInterval = setInterval(() => {
+                if (mockIdx >= mockWords.length) {
+                    stopMockStream();
+                    $mockStatus.textContent = "Demo complete";
+                    return;
+                }
+                addWord(mockWords[mockIdx]);
+                mockIdx++;
+            }, 350 + Math.random() * 300);
+        }
+
+        function stopMockStream() {
+            mockRunning = false;
+            clearInterval(mockInterval);
+            $btnMock.textContent = "Start Mock Stream";
+            $btnMock.classList.remove("active");
+            $streamDot.classList.add("off");
+            $streamStatus.textContent = "Stream stopped";
+        }
+
+        // ── Word management ────────────────────────────────
+        function addWord(word) {
+            words.push(word);
+            const span = document.createElement("span");
+            span.className = "word new";
+            span.textContent = (words.length > 1 ? " " : "") + word;
+            $notesText.appendChild(span);
+            $wcount.textContent = words.length;
+            updateButtons();
+
+            // Scroll to bottom if needed
+            const area = document.getElementById("notes-area");
+            area.scrollTop = area.scrollHeight;
+        }
+
+        // Public API: call this from the real classifier
+        window.pushWord = addWord;
+
+        function clearNotes() {
+            words = [];
+            $notesText.innerHTML = "";
+            $wcount.textContent = "0";
+            updateButtons();
+            closePanel();
+        }
+
+        function updateButtons() {
+            const hasWords = words.length > 0;
+            $btnSave.disabled = !hasWords;
+            $btnFlash.disabled = !hasWords;
+            $btnSummary.disabled = !hasWords;
+            $btnQuiz.disabled = !hasWords;
+        }
+
+        // ── Ara integration ────────────────────────────────
+        async function sendToAra(action) {
+            const subject = $subject.value.trim() || "general";
+            const text = words.join(" ");
+            if (!text) {
+                alert("No words yet — start the mock stream first!");
+                return;
+            }
+
+            $btnSave.disabled = true;
+            $btnFlash.disabled = true;
+            $btnSummary.disabled = true;
+            $btnQuiz.disabled = true;
+
+            $araPanel.style.display = "block";
+            $araResponse.style.display = "none";
+            $araStatus.innerHTML = '<span class="spinner">&#9696;</span> Sending to ThePenn study agent... (this takes ~10s)';
+            $araPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+            console.log("[ara] sending:", action, subject, text.slice(0, 50));
+
+            try {
+                const resp = await fetch("/api/ara", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action, subject, text }),
+                });
+                console.log("[ara] response status:", resp.status);
+                const data = await resp.json();
+                console.log("[ara] data:", data);
+                $araStatus.textContent = "";
+                $araResponse.style.display = "block";
+                $araResponse.textContent = data.text || data.error || "No response";
+            } catch (err) {
+                console.error("[ara] error:", err);
+                $araStatus.textContent = "";
+                $araResponse.style.display = "block";
+                $araResponse.textContent = "Error: " + err.message;
+            }
+
+            updateButtons();
+        }
+
+        function closePanel() {
+            $araPanel.style.display = "none";
+        }
+
+        // ── Button event listeners ─────────────────────────
+        $btnMock.addEventListener("click", toggleMockStream);
+        $btnSave.addEventListener("click", function() { sendToAra("save"); });
+        $btnFlash.addEventListener("click", function() { sendToAra("flashcards"); });
+        $btnSummary.addEventListener("click", function() { sendToAra("summary"); });
+        $btnQuiz.addEventListener("click", function() { sendToAra("quiz"); });
+        document.getElementById("btn-clear").addEventListener("click", clearNotes);
+        document.getElementById("btn-close-panel").addEventListener("click", closePanel);
+    </script>
+</body>
+</html>
