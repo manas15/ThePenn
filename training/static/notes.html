@@ -141,12 +141,13 @@
     <div class="controls">
         <input id="subject" class="subject-input" type="text" placeholder="Subject (e.g. biology)" value="">
         <button id="btn-save" class="btn btn-save" disabled>Save to Ara</button>
-        <button id="btn-flashcards" class="btn btn-flashcards" disabled>Flashcards</button>
-        <button id="btn-summary" class="btn btn-summary" disabled>Summary</button>
-        <button id="btn-quiz" class="btn btn-quiz" disabled>Quiz Me</button>
-        <button id="btn-email" class="btn" style="background:#ea4335;color:#fff" disabled>Send via Email</button>
         <button id="btn-telegram" class="btn" style="background:#0088cc;color:#fff" disabled>Send via Telegram</button>
         <button id="btn-clear" class="btn btn-clear">Clear</button>
+        <!-- Hidden buttons kept for JS compatibility -->
+        <button id="btn-flashcards" style="display:none" disabled>Flashcards</button>
+        <button id="btn-summary" style="display:none" disabled>Summary</button>
+        <button id="btn-quiz" style="display:none" disabled>Quiz Me</button>
+        <button id="btn-email" style="display:none" disabled>Send via Email</button>
     </div>
 
     <div id="ara-panel">

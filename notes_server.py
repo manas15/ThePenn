@@ -67,9 +67,9 @@ async def api_ara(request):
     elif action == "summary":
         msg = f"Summarize my {subject} notes"
     elif action == "email":
-        msg = f"Email a summary of my {subject} notes to me"
+        msg = f"Summarize my {subject} notes in a concise format suitable for email"
     elif action == "telegram":
-        msg = f"Send a summary of my {subject} notes to my Telegram"
+        msg = f"Summarize my {subject} notes in a concise format"
     else:
         msg = text
 
