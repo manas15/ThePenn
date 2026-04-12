@@ -289,8 +289,11 @@ async def rerank_with_llm(anthropic_client, recent_words, top3):
             anthropic_client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=10,
-                system="You are a word predictor. Given recent words and classifier candidates, "
-                       "pick the most likely next word. Reply with ONLY the word, nothing else.",
+                system="You are a word predictor for handwritten sentence recognition. "
+                       "Given the recent words and classifier candidates, pick the word that "
+                       "makes the sentence grammatically correct and coherent. "
+                       "Prioritize grammatical sense over classifier confidence. "
+                       "Reply with ONLY the word, nothing else.",
                 messages=[{
                     "role": "user",
                     "content": f"Recent words: {context}\n"
@@ -328,9 +331,10 @@ def transcribe_audio_sync(elevenlabs_client, wav_path, vocabulary):
                 file=f,
                 language_code="en",
                 tag_audio_events=False,
-                keyterms=vocabulary or [],
             )
         text = resp.text.strip().lower().strip(".,!?;:\"'()-")
+        if text:
+            text = text.split()[0]
         return text
     except Exception as e:
         print(f"[stt] ElevenLabs error: {e}")
@@ -545,9 +549,8 @@ def build_app(reader, cls_model, idx_to_word, device, confidence, notes_url,
                         reranked = False
                         original_word = word
 
-                        # LLM re-ranking for low-confidence predictions
-                        if (anthropic_client and conf < rerank_threshold
-                                and len(top3) > 1):
+                        # LLM re-ranking for grammatical coherence
+                        if (anthropic_client and len(top3) > 1):
                             await ws.send_str(json.dumps({
                                 "type": "reranking",
                                 "word_idx": word_idx,
@@ -564,7 +567,7 @@ def build_app(reader, cls_model, idx_to_word, device, confidence, notes_url,
                                 word = pick
                                 reranked = True
 
-                        accepted = conf >= confidence
+                        accepted = True
                         await ws.send_str(json.dumps({
                             "type": "classification",
                             "word_idx": word_idx,

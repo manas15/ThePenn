@@ -554,6 +554,7 @@
                         wordCounter++;
                         const cw = { idx: wordCounter, status: "writing" };
                         completedWords.push(cw);
+                        beep(880, 0.08);
                         if (trainingMode) startMicRecording();
                         $prompt.innerHTML = `<span>...</span><span class="sub">writing detected</span>`;
                         $prompt.className = "writing";
