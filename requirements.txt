@@ -1,0 +1,4 @@
+pyserial>=3.5
+aiohttp>=3.9
+numpy>=1.24
+torch>=2.0

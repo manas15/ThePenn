@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ML artifacts
+*.pt
+*.onnx
+
+# Audio recordings
+data/audio/*.wav
+
+# Training data (tracked separately or too large)
+data/sessions/*.jsonl
+data/sessions/*.csv
+data/samples.jsonl
+
+# Platform
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Build artifacts
+*.bin
+*.elf
+*.o
+*.obj
+*.map
+
+# Keys & certs
+*.der
+*.pem
+
+# Logs
+*.log

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ThePenn — Training Data Collector</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header id="status-bar">
+        <span id="connection-dot" class="dot disconnected"></span>
+        <span id="connection-text">Connecting...</span>
+        <span class="spacer"></span>
+        <span id="sample-rate">— Hz</span>
+        <span class="divider">|</span>
+        <span id="total-samples">0 samples</span>
+    </header>
+
+    <section id="chart-section">
+        <canvas id="live-chart"></canvas>
+        <div id="chart-legend">
+            <span class="legend-x">DX</span>
+            <span class="legend-y">DY</span>
+            <span class="legend-z">DZ</span>
+        </div>
+    </section>
+
+    <section id="session-section">
+        <button id="session-btn" class="session-btn-idle">Start Session</button>
+        <span id="session-status" class="session-status-text"></span>
+    </section>
+
+    <section id="transcript-section">
+        <div id="transcript-header">
+            <span class="transcript-label">Transcript</span>
+            <span id="transcript-line-num">Line 1</span>
+        </div>
+        <div id="transcript"></div>
+    </section>
+
+    <section id="record-section">
+        <div id="record-buttons">
+            <button id="record-btn" disabled>
+                <span class="record-icon"></span>
+                <span class="record-label">HOLD TO RECORD</span>
+                <span class="record-sub">say the word aloud while writing</span>
+            </button>
+            <button id="newline-btn" class="btn-newline">New Line</button>
+        </div>
+        <div id="speech-status"></div>
+        <div id="speech-feedback" class="hidden">
+            <span class="mic-icon">&#x1f3a4;</span>
+            <span id="speech-text">Listening...</span>
+        </div>
+        <div id="recording-timer" class="hidden">0.0s</div>
+    </section>
+
+    <section id="queue-section" class="hidden">
+        <div id="queue-header">
+            <h3>Pending (<span id="queue-count">0</span>)</h3>
+            <div id="queue-actions">
+                <button id="btn-save-all" class="btn-primary btn-sm">Save All</button>
+                <button id="btn-discard-all" class="btn-secondary btn-sm">Discard All</button>
+            </div>
+        </div>
+        <div id="queue-list"></div>
+    </section>
+
+    <section id="history-section">
+        <h3>Saved Samples</h3>
+        <div id="history-list"></div>
+    </section>
+
+    <section id="dataset-section">
+        <div id="dataset-header">
+            <h3>Dataset</h3>
+            <a id="download-btn" href="/api/download" class="btn-download" download="samples.jsonl">Download JSONL</a>
+        </div>
+        <div id="word-counts"></div>
+        <div id="dataset-total"></div>
+    </section>
+
+    <script src="/static/chart.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
