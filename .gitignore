@@ -30,6 +30,7 @@ Thumbs.db
 # Keys & certs
 *.der
 *.pem
+.env
 
 # Logs
 *.log

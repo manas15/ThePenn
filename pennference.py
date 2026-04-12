@@ -1,35 +1,51 @@
 """
 pennference.py
 
-End-to-end inference pipeline: pen -> segmentation -> classification -> terminal.
+End-to-end inference pipeline with web dashboard.
 
-Reads the accelerometer stream, uses the SegmentationTCN to detect word
-boundaries, classifies each extracted segment with the WordClassifier,
-and prints confident predictions to the terminal.
+Architecture:
+  - SerialReader thread: reads accelerometer, feeds AutoSegmenter, pushes
+    accel data + segmenter events over WebSocket (never blocks)
+  - Classification: runs in a thread pool when word_end fires, result
+    pushed back to the browser
+  - Browser: shows live accel chart, P(writing) bar, pipeline log,
+    captured words queue, and recognized output sentence
 
 Usage:
     python3 pennference.py
     python3 pennference.py --confidence 0.6
-    python3 pennference.py --verbose          # show all predictions + writing state
+    python3 pennference.py --port /dev/cu.usbmodem2101
 """
 
 import argparse
+import asyncio
+import json
 import sys
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import numpy as np
 import torch
+from aiohttp import web
 
 from serial_utils import find_arduino_port, open_serial, parse_line
 from training.model import SegmentationTCN, WordClassifier
 from training.data_pipeline import trim_idle, compute_features
 
-# Default model paths
+STATIC_DIR = Path(__file__).resolve().parent / "training" / "static"
 SEGMENTER_PATH = Path(__file__).resolve().parent / "segmenter.pt"
 CLASSIFIER_PATH = Path(__file__).resolve().parent / "models" / "word_classifier_best.pt"
 
 DEFAULT_CONFIDENCE = 0.5
+
+# Segmentation parameters
+BUFFER_SIZE = 256
+WRITING_THRESHOLD_HI = 0.55
+WRITING_THRESHOLD_LO = 0.40
+MIN_WORD_SAMPLES = 25
+MIN_GAP_SAMPLES = 8
 
 
 def get_device():
@@ -41,50 +57,26 @@ def get_device():
 
 
 # ---------------------------------------------------------------------------
-# Segmenter: detects word boundaries in the accelerometer stream
+# AutoSegmenter (same as auto_server.py)
 # ---------------------------------------------------------------------------
 
-class WordSegmenter:
-    """
-    Wraps SegmentationTCN with Schmitt-trigger hysteresis to extract
-    word segments from a continuous accelerometer stream.
-
-    Feed samples one at a time. Returns the extracted word (as [[x,y,z], ...])
-    when a word boundary is detected, None otherwise.
-    """
-
-    BUFFER_SIZE = 256
-    THRESHOLD_HI = 0.55   # enter "writing" when P(writing) exceeds this
-    THRESHOLD_LO = 0.40   # exit "writing" when P(writing) drops below this
-    MIN_WORD_SAMPLES = 25  # ~0.5s at 50Hz
-    MIN_GAP_SAMPLES = 8   # ~0.16s at 50Hz
-
+class AutoSegmenter:
     def __init__(self, model, device):
         self.model = model
         self.device = device
         self.model.eval()
+        self.buffer = deque(maxlen=BUFFER_SIZE)
+        self.state = "idle"
+        self.writing_count = 0
+        self.gap_count = 0
+        self.word_buffer = []
+        self.word_start_time = 0.0
 
-        from collections import deque
-        self.buffer = deque(maxlen=self.BUFFER_SIZE)
-        self.state = "idle"       # idle | writing
-        self.writing_count = 0    # consecutive frames above HI threshold
-        self.gap_count = 0        # consecutive frames below LO threshold
-        self.word_samples = []    # accumulated [x,y,z] during current word
-
-    def feed(self, x, y, z):
-        """Feed one accelerometer sample.
-
-        Returns:
-            None                - no event
-            ("writing",)        - word started
-            ("word", samples)   - word ended, samples is [[x,y,z], ...]
-        """
+    def feed(self, x, y, z, t):
         self.buffer.append((x, y, z))
-
         if len(self.buffer) < 30:
             return None
 
-        # Run segmenter on the buffer
         arr = np.array(list(self.buffer), dtype=np.float32)
         with torch.no_grad():
             inp = torch.from_numpy(arr).unsqueeze(0).to(self.device)
@@ -92,204 +84,321 @@ class WordSegmenter:
             prob = torch.sigmoid(logits[0, -1]).item()
 
         if self.state == "idle":
-            if prob > self.THRESHOLD_HI:
+            if prob > WRITING_THRESHOLD_HI:
                 self.writing_count += 1
                 if self.writing_count >= 3:
                     self.state = "writing"
                     self.gap_count = 0
-                    self.word_samples = []
-                    return ("writing",)
+                    self.word_buffer = []
+                    self.word_start_time = t
+                    return {"event": "word_start", "t": t, "prob": prob}
             else:
                 self.writing_count = 0
-
         elif self.state == "writing":
-            self.word_samples.append([x, y, z])
-
-            if prob < self.THRESHOLD_LO:
+            self.word_buffer.append([x, y, z, t])
+            if prob < WRITING_THRESHOLD_LO:
                 self.gap_count += 1
             else:
                 self.gap_count = 0
-
-            if (self.gap_count >= self.MIN_GAP_SAMPLES
-                    and len(self.word_samples) >= self.MIN_WORD_SAMPLES):
-                # Trim trailing gap frames from the word
-                trim = min(self.MIN_GAP_SAMPLES, len(self.word_samples))
-                samples = self.word_samples[:-trim]
-                self.word_samples = []
+            if self.gap_count >= MIN_GAP_SAMPLES and len(self.word_buffer) >= MIN_WORD_SAMPLES:
                 self.state = "idle"
                 self.writing_count = 0
                 self.gap_count = 0
-                return ("word", samples)
+                trim = min(MIN_GAP_SAMPLES, len(self.word_buffer))
+                word_samples = self.word_buffer[:-trim]
+                samples_xyz = [[s[0], s[1], s[2]] for s in word_samples]
+                timestamps = [s[3] - self.word_start_time for s in word_samples]
+                duration = timestamps[-1] if timestamps else 0.0
+                self.word_buffer = []
+                return {
+                    "event": "word_end",
+                    "t": t,
+                    "prob": prob,
+                    "samples": samples_xyz,
+                    "timestamps": timestamps,
+                    "duration_s": round(duration, 3),
+                    "num_samples": len(samples_xyz),
+                }
 
-        return None
+        return {"event": "prob", "prob": prob}
 
 
 # ---------------------------------------------------------------------------
-# Classifier: maps an extracted word segment to a vocabulary word
+# Serial reader thread
 # ---------------------------------------------------------------------------
 
-def classify_word(model, idx_to_word, samples_xyz, device):
-    """Classify an extracted word segment.
+class SerialReader:
+    def __init__(self, port, loop, segmenter):
+        self.port = port
+        self.loop = loop
+        self.segmenter = segmenter
+        self.connected = False
+        self.running = True
+        self.sample_rate = 0.0
+        self.subscribers = set()
 
-    Args:
-        model: trained WordClassifier
-        idx_to_word: {int: str} vocabulary mapping
-        samples_xyz: [[x, y, z], ...] raw accelerometer data for one word
-        device: torch device
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
 
-    Returns:
-        (predicted_word, confidence, top3) where top3 is [(word, prob), ...]
-    """
+    def _run(self):
+        ser = None
+        rate_n = 0
+        rate_t = time.time()
+        prev_raw = None
+
+        while self.running:
+            if ser is None:
+                try:
+                    port = self.port or find_arduino_port()
+                    if not port:
+                        self._broadcast_status(False)
+                        time.sleep(2)
+                        continue
+                    ser = open_serial(port)
+                    self.port = port
+                    self._broadcast_status(True)
+                    rate_n = 0
+                    rate_t = time.time()
+                except Exception:
+                    self._broadcast_status(False)
+                    time.sleep(2)
+                    continue
+
+            try:
+                raw = ser.readline()
+                if not raw:
+                    continue
+                parsed = parse_line(raw)
+                if parsed is None:
+                    continue
+
+                x, y, z = parsed
+                t = time.time()
+
+                rate_n += 1
+                if t - rate_t >= 2.0:
+                    self.sample_rate = round(rate_n / (t - rate_t), 1)
+                    rate_n = 0
+                    rate_t = t
+
+                # Push raw accel to browser
+                self._push(json.dumps({"type": "accel", "x": x, "y": y, "z": z, "t": t}))
+
+                # Run segmenter
+                event = self.segmenter.feed(x, y, z, t)
+
+                if event and event["event"] in ("word_start", "word_end"):
+                    self._push(json.dumps({"type": event["event"], **event}))
+                if event and "prob" in event:
+                    self._push(json.dumps({"type": "prob", "p": round(event["prob"], 3)}))
+
+            except Exception:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                ser = None
+                self._broadcast_status(False)
+                time.sleep(1)
+
+    def _broadcast_status(self, val):
+        self.connected = val
+        msg = json.dumps({
+            "type": "status", "connected": val,
+            "port": self.port or "", "sample_rate_hz": self.sample_rate,
+        })
+        self._push(msg)
+
+    def _push(self, msg):
+        if self.loop:
+            for q in list(self.subscribers):
+                try:
+                    self.loop.call_soon_threadsafe(q.put_nowait, msg)
+                except (asyncio.QueueFull, RuntimeError):
+                    pass
+
+    def subscribe(self):
+        q = asyncio.Queue(maxsize=200)
+        self.subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q):
+        self.subscribers.discard(q)
+
+    def stop(self):
+        self.running = False
+
+
+# ---------------------------------------------------------------------------
+# Classification (runs in thread pool)
+# ---------------------------------------------------------------------------
+
+def classify_word_sync(cls_model, idx_to_word, samples_xyz, device):
     trimmed = trim_idle(samples_xyz)
     features = compute_features(trimmed)
-    features_t = torch.from_numpy(features).unsqueeze(0).to(device)  # (1, T, 10)
+    features_t = torch.from_numpy(features).unsqueeze(0).to(device)
     lengths = torch.tensor([features_t.size(1)], dtype=torch.long).to(device)
 
     with torch.no_grad():
-        logits = model(features_t, lengths)
-        probs = torch.softmax(logits, dim=1)[0]  # (num_words,)
+        logits = cls_model(features_t, lengths)
+        probs = torch.softmax(logits, dim=1)[0]
 
-    # Top prediction
     confidence, pred_idx = probs.max(dim=0)
     word = idx_to_word[pred_idx.item()]
 
-    # Top 3 for verbose output
     top_k = torch.topk(probs, min(3, len(probs)))
-    top3 = [(idx_to_word[i.item()], p.item()) for i, p in zip(top_k.indices, top_k.values)]
+    top3 = [{"word": idx_to_word[i.item()], "prob": round(p.item(), 4)}
+            for i, p in zip(top_k.indices, top_k.values)]
 
-    return word, confidence.item(), top3
+    return word, round(confidence.item(), 4), top3
 
 
 # ---------------------------------------------------------------------------
-# Main loop
+# Web app
+# ---------------------------------------------------------------------------
+
+def build_app(reader, cls_model, idx_to_word, device, confidence):
+    app = web.Application()
+
+    async def on_startup(app):
+        reader.loop = asyncio.get_running_loop()
+    app.on_startup.append(on_startup)
+
+    async def index(request):
+        return web.FileResponse(STATIC_DIR / "pennference.html")
+
+    async def static_handler(request):
+        name = request.match_info["filename"]
+        path = STATIC_DIR / name
+        if path.exists():
+            return web.FileResponse(path)
+        raise web.HTTPNotFound()
+
+    async def ws_handler(request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        q = reader.subscribe()
+
+        # Send initial state
+        await ws.send_str(json.dumps({
+            "type": "status",
+            "connected": reader.connected,
+            "port": reader.port or "",
+            "sample_rate_hz": reader.sample_rate,
+        }))
+        await ws.send_str(json.dumps({
+            "type": "config",
+            "confidence": confidence,
+            "vocabulary": sorted(idx_to_word.values()),
+        }))
+
+        loop = asyncio.get_running_loop()
+
+        async def pump():
+            try:
+                while True:
+                    msg = await q.get()
+                    if ws.closed:
+                        break
+                    await ws.send_str(msg)
+            except Exception:
+                pass
+
+        pump_task = asyncio.create_task(pump())
+
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+
+                    if data.get("type") == "classify":
+                        samples = data["samples"]
+                        word_idx = data.get("word_idx", 0)
+
+                        # Run classification in thread pool
+                        word, conf, top3 = await loop.run_in_executor(
+                            None, classify_word_sync,
+                            cls_model, idx_to_word, samples, device)
+
+                        await ws.send_str(json.dumps({
+                            "type": "classification",
+                            "word_idx": word_idx,
+                            "word": word,
+                            "confidence": conf,
+                            "top3": top3,
+                            "accepted": conf >= confidence,
+                        }))
+
+                elif msg.type == web.WSMsgType.ERROR:
+                    break
+        finally:
+            pump_task.cancel()
+            reader.unsubscribe(q)
+        return ws
+
+    app.router.add_get("/", index)
+    app.router.add_get("/static/{filename}", static_handler)
+    app.router.add_get("/ws", ws_handler)
+    return app
+
+
+# ---------------------------------------------------------------------------
+# Main
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="ThePenn: write with the pen, see words in the terminal")
-    parser.add_argument("--port", type=str, default=None,
-                        help="Serial port (auto-detect if omitted)")
-    parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE,
-                        help=f"Minimum confidence to accept a prediction (default: {DEFAULT_CONFIDENCE})")
-    parser.add_argument("--segmenter", type=str, default=str(SEGMENTER_PATH),
-                        help="Path to segmenter .pt file")
-    parser.add_argument("--classifier", type=str, default=str(CLASSIFIER_PATH),
-                        help="Path to classifier .pt file")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Show all predictions with confidence scores")
+    parser = argparse.ArgumentParser(description="ThePenn inference dashboard")
+    parser.add_argument("--port", type=str, default=None)
+    parser.add_argument("--http-port", type=int, default=8767)
+    parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE)
+    parser.add_argument("--segmenter", type=str, default=str(SEGMENTER_PATH))
+    parser.add_argument("--classifier", type=str, default=str(CLASSIFIER_PATH))
     args = parser.parse_args()
 
-    # --- Validate model files ---
     if not Path(args.segmenter).exists():
-        print(f"Segmenter not found: {args.segmenter}")
-        print("Run: python3 -m training.train_segmenter")
-        sys.exit(1)
+        raise SystemExit(f"Segmenter not found: {args.segmenter}\nRun: python3 -m training.train_segmenter")
     if not Path(args.classifier).exists():
-        print(f"Classifier not found: {args.classifier}")
-        print("Run: python3 -m training.train")
-        sys.exit(1)
+        raise SystemExit(f"Classifier not found: {args.classifier}\nRun: python3 -m training.train")
 
     device = get_device()
 
-    # --- Load segmenter ---
+    # Load segmenter
+    print(f"Loading segmenter from {args.segmenter}...")
     seg_model = SegmentationTCN(
         in_channels=3, hidden=64, kernel_size=3,
-        num_blocks=5, dropout=0.15,
-    ).to(device)
+        num_blocks=5, dropout=0.15).to(device)
     seg_model.load_state_dict(
         torch.load(args.segmenter, weights_only=True, map_location=device))
     seg_model.eval()
 
-    # --- Load classifier ---
+    # Load classifier
+    print(f"Loading classifier from {args.classifier}...")
     ckpt = torch.load(args.classifier, weights_only=False, map_location=device)
     idx_to_word = ckpt["idx_to_word"]
-    word_to_idx = ckpt["word_to_idx"]
     num_words = ckpt["num_words"]
-
     cls_model = WordClassifier(num_features=10, num_words=num_words).to(device)
     cls_model.load_state_dict(ckpt["model_state_dict"])
     cls_model.eval()
 
-    vocab = sorted(word_to_idx.keys())
-    print(f"Device:     {device}")
-    print(f"Vocabulary: {num_words} words")
-    print(f"  {', '.join(vocab)}")
+    vocab = sorted(idx_to_word.values())
+    print(f"Device: {device}")
+    print(f"Vocabulary ({num_words}): {', '.join(vocab)}")
     print(f"Confidence: {args.confidence:.0%}")
     print()
 
-    # --- Connect to Arduino ---
-    port = args.port or find_arduino_port()
-    if not port:
-        print("No Arduino found. Connect the device and try again.")
-        print("Available ports:")
-        import serial.tools.list_ports
-        for p in serial.tools.list_ports.comports():
-            print(f"  {p.device}  {p.description}")
-        sys.exit(1)
+    segmenter = AutoSegmenter(seg_model, device)
+    reader = SerialReader(args.port, None, segmenter)
+    app = build_app(reader, cls_model, idx_to_word, device, args.confidence)
 
-    print(f"Connecting to {port}...")
-    ser = open_serial(port)
-    print("Connected. Start writing!")
+    print(f"Pennference Dashboard")
+    print(f"  Serial: {args.port or 'auto-detect'}")
+    print(f"  UI: http://localhost:{args.http_port}")
     print()
-    print("=" * 50)
-    print()
-
-    segmenter = WordSegmenter(seg_model, device)
-    word_count = 0
-    output_words = []
-
-    def log(msg):
-        ts = time.strftime("%H:%M:%S")
-        print(f"  {ts}  {msg}")
 
     try:
-        while True:
-            raw = ser.readline()
-            if not raw:
-                continue
-            parsed = parse_line(raw)
-            if parsed is None:
-                continue
-
-            x, y, z = parsed
-            event = segmenter.feed(x, y, z)
-
-            if event is None:
-                continue
-
-            if event[0] == "writing":
-                log("WORD STARTED")
-
-            elif event[0] == "word":
-                samples = event[1]
-                log(f"WORD DETECTED  ({len(samples)} samples)")
-                log("CLASSIFYING...")
-
-                word, confidence, top3 = classify_word(
-                    cls_model, idx_to_word, samples, device)
-
-                top3_str = "  ".join(f"{w} {p:.0%}" for w, p in top3)
-                log(f"  top 3:  {top3_str}")
-
-                if confidence >= args.confidence:
-                    word_count += 1
-                    output_words.append(word)
-                    log(f"WORD IS: {word}  ({confidence:.0%})")
-                else:
-                    log(f"LOW CONFIDENCE: {word}  ({confidence:.0%}) -- skipped")
-
-                log(f"TOTAL WORDS: {word_count}")
-                print(f"  >>> {' '.join(output_words)}")
-                print()
-
-    except KeyboardInterrupt:
-        print()
-        print("=" * 50)
-        print(f"Session: {word_count} words recognized")
-        if output_words:
-            print(f"Output: {' '.join(output_words)}")
+        web.run_app(app, host="localhost", port=args.http_port, print=None)
     finally:
-        ser.close()
+        reader.stop()
 
 
 if __name__ == "__main__":

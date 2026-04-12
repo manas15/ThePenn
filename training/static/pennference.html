@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pennference — Live Inference</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 16px; }
+
+        header { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot.connected { background: #3fb950; }
+        .dot.disconnected { background: #f85149; }
+        .spacer { flex: 1; }
+
+        /* Output sentence */
+        #output-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 12px 0; }
+        #output-label { font-size: 12px; color: #8b949e; margin-bottom: 6px; }
+        #output-sentence { font-size: 28px; font-weight: 600; min-height: 40px; word-wrap: break-word; }
+        #output-sentence .word { display: inline; }
+        #output-sentence .word.pending { color: #8b949e; font-style: italic; }
+        #output-sentence .word.accepted { color: #3fb950; }
+        #output-sentence .word.rejected { color: #f85149; text-decoration: line-through; }
+        #word-count { font-size: 13px; color: #8b949e; margin-top: 8px; }
+
+        /* Chart */
+        #chart-wrap { height: 120px; margin: 8px 0; }
+        #chart-wrap canvas { width: 100%; height: 100%; }
+
+        /* P(writing) bar */
+        #prob-bar-wrap { height: 28px; background: #161b22; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; position: relative; }
+        #prob-bar { height: 100%; background: #238636; transition: width 0.05s; width: 0%; }
+        #prob-label { position: absolute; top: 4px; left: 8px; font-size: 12px; color: #8b949e; }
+
+        /* Vocabulary */
+        #vocab { font-size: 12px; color: #484f58; margin-bottom: 12px; }
+
+        /* Two-column layout: queue + log */
+        #panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+        @media (max-width: 800px) { #panels { grid-template-columns: 1fr; } }
+
+        /* Word queue */
+        #queue-section { }
+        #queue-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
+        .queue-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+        .queue-card.writing { border-color: #d29922; }
+        .queue-card.classifying { border-color: #1f6feb; }
+        .queue-card.accepted { border-color: #3fb950; }
+        .queue-card.rejected { border-color: #f85149; }
+        .queue-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .queue-num { font-size: 12px; color: #8b949e; min-width: 28px; }
+        .queue-status { font-size: 13px; font-weight: 600; }
+        .queue-status.writing { color: #d29922; }
+        .queue-status.classifying { color: #1f6feb; }
+        .queue-status.accepted { color: #3fb950; }
+        .queue-status.rejected { color: #f85149; }
+        .queue-info { font-size: 12px; color: #8b949e; }
+        .queue-top3 { font-size: 12px; color: #8b949e; margin-top: 4px; }
+        .queue-top3 .rank { display: inline-block; margin-right: 12px; }
+        .queue-top3 .rank .w { color: #c9d1d9; }
+        .queue-top3 .rank .p { color: #8b949e; }
+        .queue-canvas { width: 100%; height: 60px; margin-top: 6px; }
+
+        /* Pipeline log */
+        #log-section { }
+        #log-section h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
+        #log { font-size: 12px; font-family: 'SF Mono', 'Menlo', monospace; color: #8b949e; max-height: 500px;
+               overflow-y: auto; background: #161b22; border-radius: 6px; padding: 8px; border: 1px solid #30363d; }
+        #log div { padding: 3px 0; border-bottom: 1px solid #21262d; white-space: pre-wrap; }
+        #log .log-event { color: #c9d1d9; }
+        #log .log-word-start { color: #d29922; }
+        #log .log-word-end { color: #1f6feb; }
+        #log .log-classify { color: #1f6feb; font-style: italic; }
+        #log .log-result { color: #3fb950; font-weight: 600; }
+        #log .log-reject { color: #f85149; }
+        #log .log-status { color: #484f58; }
+    </style>
+</head>
+<body>
+    <header>
+        <span id="dot" class="dot disconnected"></span>
+        <span id="conn-text">Connecting...</span>
+        <span class="spacer"></span>
+        <span id="rate">-- Hz</span>
+    </header>
+
+    <div id="output-section">
+        <div id="output-label">RECOGNIZED OUTPUT</div>
+        <div id="output-sentence"></div>
+        <div id="word-count">0 words</div>
+    </div>
+
+    <div id="chart-wrap"><canvas id="chart"></canvas></div>
+
+    <div id="prob-bar-wrap">
+        <div id="prob-bar"></div>
+        <span id="prob-label">P(writing): --</span>
+    </div>
+
+    <div id="vocab"></div>
+
+    <div id="panels">
+        <div id="queue-section">
+            <h3>Word Queue (<span id="queue-count">0</span>)</h3>
+            <div id="queue-list"></div>
+        </div>
+        <div id="log-section">
+            <h3>Pipeline Log</h3>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script src="/static/chart.js"></script>
+    <script>
+        const $dot = document.getElementById("dot");
+        const $conn = document.getElementById("conn-text");
+        const $rate = document.getElementById("rate");
+        const $probBar = document.getElementById("prob-bar");
+        const $probLabel = document.getElementById("prob-label");
+        const $outputSentence = document.getElementById("output-sentence");
+        const $wordCount = document.getElementById("word-count");
+        const $vocab = document.getElementById("vocab");
+        const $queueCount = document.getElementById("queue-count");
+        const $queueList = document.getElementById("queue-list");
+        const $log = document.getElementById("log");
+
+        let ws = null;
+        let prevRaw = null;
+        let wordQueue = [];    // {idx, status, samples, timestamps, duration_s, num_samples, word, confidence, top3}
+        let outputWords = [];  // accepted words
+        let wordCounter = 0;
+        let confidence = 0.5;
+
+        const chart = new AccelChart(document.getElementById("chart"));
+        (function animLoop() { chart.draw(); requestAnimationFrame(animLoop); })();
+
+        // Audio context for beeps
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function beep(freq = 880, duration = 0.12) {
+            if (audioCtx.state === "suspended") audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            gain.gain.value = 0.3;
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function beepLow() { beep(440, 0.15); }
+
+        // Logging
+        function log(msg, cls = "log-event") {
+            const d = document.createElement("div");
+            d.className = cls;
+            const ts = new Date().toLocaleTimeString();
+            d.textContent = `${ts}  ${msg}`;
+            $log.prepend(d);
+            if ($log.children.length > 100) $log.lastChild.remove();
+        }
+
+        // Render output sentence
+        function renderOutput() {
+            $outputSentence.innerHTML = "";
+            outputWords.forEach(w => {
+                const span = document.createElement("span");
+                span.className = "word accepted";
+                span.textContent = w + " ";
+                $outputSentence.appendChild(span);
+            });
+            // Show any pending words
+            wordQueue.forEach(item => {
+                if (item.status === "writing" || item.status === "classifying") {
+                    const span = document.createElement("span");
+                    span.className = "word pending";
+                    span.textContent = (item.status === "writing" ? "..." : "?") + " ";
+                    $outputSentence.appendChild(span);
+                }
+            });
+            $wordCount.textContent = `${outputWords.length} word${outputWords.length !== 1 ? "s" : ""}`;
+        }
+
+        // Render word queue
+        function renderQueue() {
+            $queueCount.textContent = wordQueue.length;
+            $queueList.innerHTML = "";
+
+            // Show most recent first
+            for (let i = wordQueue.length - 1; i >= 0; i--) {
+                const item = wordQueue[i];
+                const card = document.createElement("div");
+                card.className = "queue-card " + item.status;
+
+                const header = document.createElement("div");
+                header.className = "queue-header";
+
+                const num = document.createElement("span");
+                num.className = "queue-num";
+                num.textContent = `#${item.idx}`;
+                header.appendChild(num);
+
+                const status = document.createElement("span");
+                status.className = "queue-status " + item.status;
+                if (item.status === "writing") {
+                    status.textContent = "WRITING...";
+                } else if (item.status === "classifying") {
+                    status.textContent = "CLASSIFYING...";
+                } else if (item.status === "accepted") {
+                    status.textContent = `"${item.word}" (${(item.confidence * 100).toFixed(0)}%)`;
+                } else if (item.status === "rejected") {
+                    status.textContent = `${item.word}? (${(item.confidence * 100).toFixed(0)}%) — rejected`;
+                }
+                header.appendChild(status);
+
+                if (item.duration_s != null) {
+                    const info = document.createElement("span");
+                    info.className = "queue-info";
+                    info.textContent = `${item.duration_s.toFixed(2)}s / ${item.num_samples} pts`;
+                    header.appendChild(info);
+                }
+
+                card.appendChild(header);
+
+                // Top 3
+                if (item.top3) {
+                    const top3div = document.createElement("div");
+                    top3div.className = "queue-top3";
+                    item.top3.forEach((r, ri) => {
+                        const rank = document.createElement("span");
+                        rank.className = "rank";
+                        rank.innerHTML = `<span class="w">${r.word}</span> <span class="p">${(r.prob * 100).toFixed(1)}%</span>`;
+                        top3div.appendChild(rank);
+                    });
+                    card.appendChild(top3div);
+                }
+
+                // Mini chart for completed words
+                if (item.samples && item.status !== "writing") {
+                    const canvas = document.createElement("canvas");
+                    canvas.className = "queue-canvas";
+                    card.appendChild(canvas);
+                    requestAnimationFrame(() => {
+                        const miniChart = new AccelChart(canvas, {
+                            windowSec: Math.max((item.duration_s || 0.5) * 1.1, 0.5),
+                            autoScale: true,
+                        });
+                        const deltas = [];
+                        for (let j = 1; j < item.samples.length; j++) {
+                            deltas.push({
+                                x: item.samples[j][0] - item.samples[j - 1][0],
+                                y: item.samples[j][1] - item.samples[j - 1][1],
+                                z: item.samples[j][2] - item.samples[j - 1][2],
+                                t: item.timestamps[j],
+                            });
+                        }
+                        miniChart.setData(deltas);
+                        miniChart.draw();
+                    });
+                }
+
+                $queueList.appendChild(card);
+            }
+        }
+
+        // WebSocket
+        function connectWS() {
+            const proto = location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+            ws.onmessage = (evt) => {
+                const data = JSON.parse(evt.data);
+
+                switch (data.type) {
+                    case "status":
+                        $dot.className = "dot " + (data.connected ? "connected" : "disconnected");
+                        $conn.textContent = data.connected ? `Connected: ${data.port}` : "Disconnected";
+                        $rate.textContent = data.connected ? `${data.sample_rate_hz} Hz` : "-- Hz";
+                        log(data.connected ? `Connected to ${data.port}` : "Disconnected", "log-status");
+                        break;
+
+                    case "config":
+                        confidence = data.confidence;
+                        $vocab.textContent = `Vocabulary: ${data.vocabulary.join(", ")}  |  Confidence threshold: ${(confidence * 100).toFixed(0)}%`;
+                        break;
+
+                    case "accel":
+                        if (prevRaw) {
+                            chart.push({
+                                x: data.x - prevRaw.x,
+                                y: data.y - prevRaw.y,
+                                z: data.z - prevRaw.z,
+                                t: data.t,
+                            });
+                        }
+                        prevRaw = { x: data.x, y: data.y, z: data.z };
+                        break;
+
+                    case "prob": {
+                        const pct = Math.round(data.p * 100);
+                        $probBar.style.width = pct + "%";
+                        $probBar.style.background = data.p > 0.5 ? "#238636" : "#30363d";
+                        $probLabel.textContent = `P(writing): ${pct}%`;
+                        break;
+                    }
+
+                    case "word_start": {
+                        wordCounter++;
+                        const item = { idx: wordCounter, status: "writing" };
+                        wordQueue.push(item);
+                        log(`#${wordCounter}  WORD STARTED`, "log-word-start");
+                        renderQueue();
+                        renderOutput();
+                        break;
+                    }
+
+                    case "word_end": {
+                        beep();
+                        // Find the most recent "writing" item
+                        let item = null;
+                        for (let i = wordQueue.length - 1; i >= 0; i--) {
+                            if (wordQueue[i].status === "writing") {
+                                item = wordQueue[i];
+                                break;
+                            }
+                        }
+                        if (!item) {
+                            // Edge case: word_end without word_start (segmenter state)
+                            wordCounter++;
+                            item = { idx: wordCounter };
+                            wordQueue.push(item);
+                        }
+                        item.status = "classifying";
+                        item.samples = data.samples;
+                        item.timestamps = data.timestamps;
+                        item.duration_s = data.duration_s;
+                        item.num_samples = data.num_samples;
+
+                        log(`#${item.idx}  WORD DETECTED  (${data.num_samples} samples, ${data.duration_s}s)`, "log-word-end");
+                        log(`#${item.idx}  CLASSIFYING...`, "log-classify");
+
+                        renderQueue();
+                        renderOutput();
+
+                        // Send to server for classification
+                        ws.send(JSON.stringify({
+                            type: "classify",
+                            word_idx: item.idx,
+                            samples: data.samples,
+                        }));
+                        break;
+                    }
+
+                    case "classification": {
+                        const item = wordQueue.find(w => w.idx === data.word_idx);
+                        if (!item) break;
+
+                        item.word = data.word;
+                        item.confidence = data.confidence;
+                        item.top3 = data.top3;
+
+                        const top3Str = data.top3.map(r => `${r.word} ${(r.prob * 100).toFixed(0)}%`).join("  ");
+
+                        if (data.accepted) {
+                            item.status = "accepted";
+                            outputWords.push(data.word);
+                            beep(660, 0.08);
+                            log(`#${item.idx}  WORD IS: "${data.word}"  (${(data.confidence * 100).toFixed(0)}%)  [${top3Str}]`, "log-result");
+                        } else {
+                            item.status = "rejected";
+                            beepLow();
+                            log(`#${item.idx}  LOW CONFIDENCE: "${data.word}" (${(data.confidence * 100).toFixed(0)}%)  [${top3Str}]`, "log-reject");
+                        }
+
+                        log(`TOTAL WORDS: ${outputWords.length}`, "log-event");
+                        renderQueue();
+                        renderOutput();
+                        break;
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                $dot.className = "dot disconnected";
+                $conn.textContent = "Reconnecting...";
+                setTimeout(connectWS, 2000);
+            };
+            ws.onerror = () => ws.close();
+        }
+        connectWS();
+    </script>
+</body>
+</html>
