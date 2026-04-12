@@ -49,74 +49,61 @@ app = App(
 # ── Tools ───────────────────────────────────────────────
 
 @app.tool()
-def save_notes(text: str, subject: str, date: str = "") -> str:
-    """Save recognized handwritten notes for a subject and date.
-    Appends to existing notes if the subject+date already has entries."""
-    subject = subject.strip().lower().replace(" ", "-")
-    if not date:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    subject_dir = NOTES_DIR / subject
-    subject_dir.mkdir(parents=True, exist_ok=True)
-    notes_file = subject_dir / f"{date}.json"
+def save_notes(text: str, subject: str) -> str:
+    """Save handwritten notes by writing them as a markdown file in the Ara workspace.
+    This makes notes visible in the Ara console and accessible to the agent's memory."""
+    import os
+    from datetime import datetime, timezone
 
-    if notes_file.exists():
-        data = json.loads(notes_file.read_text())
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    time_str = datetime.now(timezone.utc).strftime("%H:%M")
+    notes_dir = "/root/.ara/workspace"
+    filepath = os.path.join(notes_dir, f"notes-{subject}.md")
+
+    header = f"# {subject.title()} Notes\n\n"
+    entry = f"## {date} {time_str}\n\n{text}\n\n---\n\n"
+
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            existing = f.read()
+        content = existing + entry
     else:
-        data = {"subject": subject, "date": date, "entries": []}
+        content = header + entry
 
-    data["entries"].append({
-        "text": text,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-    notes_file.write_text(json.dumps(data, indent=2))
+    with open(filepath, "w") as f:
+        f.write(content)
 
-    total_words = sum(len(e["text"].split()) for e in data["entries"])
-    return f"Saved notes for {subject} ({date}). Total entries: {len(data['entries'])}, ~{total_words} words."
+    word_count = len(text.split())
+    return f"Saved {word_count} words of {subject} notes to {filepath}"
 
 
 @app.tool()
-def get_notes(subject: str, date: str = "") -> str:
-    """Retrieve notes for a subject. If date is empty, returns the most recent notes.
-    Returns the full text of all note entries for that subject+date."""
-    subject = subject.strip().lower().replace(" ", "-")
-    subject_dir = NOTES_DIR / subject
+def get_notes(subject: str) -> str:
+    """Read saved notes for a subject from the Ara workspace."""
+    import os
 
-    if not subject_dir.exists():
-        return f"No notes found for subject '{subject}'."
-
-    if date:
-        notes_file = subject_dir / f"{date}.json"
-        if not notes_file.exists():
-            return f"No notes for {subject} on {date}."
-        data = json.loads(notes_file.read_text())
-    else:
-        files = sorted(subject_dir.glob("*.json"), reverse=True)
-        if not files:
-            return f"No notes found for subject '{subject}'."
-        data = json.loads(files[0].read_text())
-        date = data["date"]
-
-    all_text = "\n\n".join(e["text"] for e in data["entries"])
-    return f"Notes for {subject} ({date}):\n\n{all_text}"
+    filepath = os.path.join("/root/.ara/workspace", f"notes-{subject}.md")
+    if not os.path.exists(filepath):
+        return f"No notes found for '{subject}'."
+    with open(filepath, "r") as f:
+        return f.read()
 
 
 @app.tool()
 def list_subjects() -> str:
-    """List all subjects that have saved notes, with dates available."""
-    if not NOTES_DIR.exists():
-        return "No notes saved yet."
+    """List all subjects that have saved notes."""
+    import os
+    import glob
 
+    files = glob.glob("/root/.ara/workspace/notes-*.md")
+    if not files:
+        return "No notes saved yet."
     subjects = []
-    for subject_dir in sorted(NOTES_DIR.iterdir()):
-        if not subject_dir.is_dir():
-            continue
-        dates = sorted([f.stem for f in subject_dir.glob("*.json")], reverse=True)
-        if dates:
-            subjects.append(f"- {subject_dir.name}: {len(dates)} session(s), latest {dates[0]}")
-
-    if not subjects:
-        return "No notes saved yet."
-    return "Subjects:\n" + "\n".join(subjects)
+    for f in sorted(files):
+        name = os.path.basename(f).replace("notes-", "").replace(".md", "")
+        size = os.path.getsize(f)
+        subjects.append(f"- {name} ({size} bytes)")
+    return "Saved subjects:\n" + "\n".join(subjects)
 
 
 # ── Agents ──────────────────────────────────────────────
@@ -143,12 +130,14 @@ Your capabilities:
 
 When you receive new notes (message starts with "New notes for"):
 1. Extract the subject from the message
-2. Use save_notes to store them
-3. Confirm what was saved and offer: flashcards, summary, or quiz
+2. Use save_notes tool to store them — you MUST actually call the tool, do not skip it
+3. After the tool confirms, offer: flashcards, summary, or quiz
 
-When asked for flashcards: use get_notes first, then generate 10 Q/A pairs.
-When asked for a summary: use get_notes first, then create a structured summary.
-When asked for a quiz: use get_notes first, then ask one question.
+When asked for flashcards: call get_notes tool first, then generate 10 Q/A pairs.
+When asked for a summary: call get_notes tool first, then create a structured summary.
+When asked for a quiz: call get_notes tool first, then ask one question.
+
+CRITICAL: Always call the tools. Never pretend to have called a tool. If a tool fails, report the error.
 
 When asked to send via email/Telegram/messaging:
 1. Use get_notes to retrieve the notes
