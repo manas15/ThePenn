@@ -34,11 +34,20 @@ def make_sample(word, samples, timestamps, recorded_at=None, audio_file=None):
 
 
 def append_sample(filepath, sample):
-    """Append one sample as a JSONL line. Creates the file if needed."""
+    """Append one sample as a JSONL line. Creates the file if needed.
+
+    Also records the sample in the SQLite index. Index failures are logged
+    but never block the jsonl write — jsonl is the source of truth.
+    """
     os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
     with open(filepath, "a") as f:
         f.write(json.dumps(sample) + "\n")
         f.flush()
+    try:
+        from training.sample_db import record_sample
+        record_sample(sample, filepath)
+    except Exception as e:
+        print(f"[sample_db] index update failed: {e}")
 
 
 def load_samples(filepath):
@@ -63,6 +72,11 @@ def delete_sample(filepath, sample_id):
     with open(filepath, "w") as f:
         for s in filtered:
             f.write(json.dumps(s) + "\n")
+    try:
+        from training.sample_db import delete_sample_from_db
+        delete_sample_from_db(sample_id)
+    except Exception as e:
+        print(f"[sample_db] index delete failed: {e}")
     return True
 
 

@@ -8,6 +8,9 @@ venv/
 # ML artifacts
 *.onnx
 
+# Derived sample index (rebuild via `python -m training.sample_db rebuild`)
+training_data/samples.db
+
 # Audio recordings
 *.wav
 
